@@ -1,0 +1,1 @@
+Esto es un espejo de la actual api de producción, NO es una carpeta de desarrollo si no que para que leas como esta escrito el backend

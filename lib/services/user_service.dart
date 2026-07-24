@@ -1,26 +1,32 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'auth_service.dart';
+import 'api_client.dart';
 
 class UserService {
-  final String baseUrl = 'https://api.nacholoz3d.cl/api';
+  static final UserService _instance = UserService._internal();
+  factory UserService() => _instance;
+  UserService._internal();
+  final _api = ApiClient();
 
   Future<Map<String, dynamic>> getProfile(String username) async {
-    final token = await AuthService().getToken();
+    final data = await _api.get('/users/$username');
+    return data as Map<String, dynamic>;
+  }
 
-    final response = await http.get(
-      Uri.parse(
-          '$baseUrl/users/$username'), // Ajusta si tu endpoint es distinto
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+  Future<List<dynamic>> getUserLibrary(String username,
+      {int page = 1, int limit = 10}) async {
+    final data =
+        await _api.get('/users/$username/library?page=$page&limit=$limit');
+    if (data is List) return data;
+    return [];
+  }
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw Exception('Fallo al cargar el perfil');
-    }
+  Future<Map<String, dynamic>> getUserStats(String username) async {
+    final data = await _api.get('/users/$username/stats');
+    return data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> setReadingGoal(int targetBooks) async {
+    final data = await _api.post('/users/goal', body: {'target_books': targetBooks});
+    return data as Map<String, dynamic>;
   }
 }
+

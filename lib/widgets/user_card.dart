@@ -8,12 +8,14 @@ class UserCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final String mode; // 'feed' o 'review'
   final VoidCallback? onBookClick;
+  final VoidCallback? onLikeClick;
 
   const UserCard({
     super.key,
     required this.item,
     this.mode = 'feed',
     this.onBookClick,
+    this.onLikeClick,
   });
 
   // Colores Pastel para los estados
@@ -51,18 +53,18 @@ class UserCard extends StatelessWidget {
 
     String avatarUrl = item['avatar_url'] ??
         'https://api.dicebear.com/7.x/bottts/png?seed=${item['username']}';
-    if (avatarUrl.contains('/svg'))
+    if (avatarUrl.contains('/svg')) {
       avatarUrl = avatarUrl.replaceAll('/svg', '/png');
+    }
 
     return Container(
-      // Márgenes para separarla del fondo y crear el efecto burbuja
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24.0), // Radio gigante
+        borderRadius: BorderRadius.circular(24.0),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.08), // Resplandor ultra suave
+            color: primaryColor.withValues(alpha: 0.08),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -75,14 +77,13 @@ class UserCard extends StatelessWidget {
           children: [
             // HEADER
             Padding(
-              padding: const EdgeInsets.all(20.0), // Más respiro interior
+              padding: const EdgeInsets.all(20.0),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 24,
                     backgroundImage: CachedNetworkImageProvider(avatarUrl),
-                    backgroundColor: primaryColor
-                        .withOpacity(0.1), // Fondo suave para el avatar
+                    backgroundColor: primaryColor.withValues(alpha: 0.1),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -105,14 +106,13 @@ class UserCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        // BADGES SUAVES
                         if (mode == 'feed' && item['status'] != null)
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: _getStatusColor(item['status'], context)
-                                  .withOpacity(0.15),
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -132,7 +132,7 @@ class UserCard extends StatelessWidget {
               ),
             ),
 
-            // TEXTO DE LA RESEÑA (Itálica y elegante)
+            // TEXTO DE LA RESEÑA
             if (item['review_text'] != null &&
                 item['review_text'].toString().isNotEmpty)
               Padding(
@@ -156,7 +156,7 @@ class UserCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.05), // Cápsula pastel
+                      color: primaryColor.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -180,7 +180,7 @@ class UserCard extends StatelessWidget {
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  fontFamily: 'Lora', // Título en Serif
+                                  fontFamily: 'Lora',
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -196,8 +196,7 @@ class UserCard extends StatelessWidget {
                                     letterSpacing: 0.5),
                               ),
                               const SizedBox(height: 8),
-                              // Estrellas amarillas pastel redondeadas
-                              if (item['rating'] != null)
+                              if (item['rating'] != null && item['status'] != 'leyendo')
                                 Row(
                                   children: List.generate(5, (index) {
                                     return Icon(
@@ -209,6 +208,47 @@ class UserCard extends StatelessWidget {
                                     );
                                   }),
                                 ),
+                              if (item['status'] == 'leyendo') ...[
+                                const SizedBox(height: 6),
+                                Builder(builder: (context) {
+                                  final currentPage = (item['current_page'] as num?)?.toInt() ?? 0;
+                                  final pageCount = (item['page_count'] as num?)?.toInt();
+                                  final double progress = (pageCount != null && pageCount > 0)
+                                      ? (currentPage / pageCount).clamp(0.0, 1.0)
+                                      : 0.0;
+                                  final int percentage = (progress * 100).round();
+
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            pageCount != null ? '$currentPage / $pageCount pág.' : '$currentPage pág.',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                          ),
+                                          if (pageCount != null)
+                                            Text(
+                                              '$percentage%',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryColor),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: LinearProgressIndicator(
+                                          value: progress,
+                                          minHeight: 5,
+                                          backgroundColor: primaryColor.withValues(alpha: 0.15),
+                                          color: primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }),
+                              ],
                             ],
                           ),
                         ),
@@ -218,12 +258,29 @@ class UserCard extends StatelessWidget {
                 ),
               ),
 
-            // ACTIONS (Botón Compartir)
+            // ACTIONS
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               child: Row(
                 children: [
+                  IconButton(
+                    icon: Icon(
+                      item['has_liked'] == true ? Icons.favorite : Icons.favorite_border,
+                      color: item['has_liked'] == true ? const Color(0xFFE57373) : Colors.grey.shade500,
+                      size: 22,
+                    ),
+                    onPressed: onLikeClick,
+                  ),
+                  Text(
+                    '${item['likes_count'] ?? 0}',
+                    style: TextStyle(
+                      color: item['has_liked'] == true ? const Color(0xFFE57373) : Colors.grey.shade600,
+                      fontWeight: item['has_liked'] == true ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const Spacer(),
                   TextButton.icon(
                     onPressed: () => _share(context),
                     icon: Icon(Icons.ios_share_rounded,

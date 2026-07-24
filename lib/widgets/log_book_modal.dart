@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // <-- IMPORTANTE AÑADIR ESTO
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/reading_service.dart';
 
 class LogBookModal extends StatefulWidget {
@@ -16,11 +16,18 @@ class _LogBookModalState extends State<LogBookModal> {
   String _status = 'leyendo';
   int _rating = 0;
   final TextEditingController _reviewController = TextEditingController();
+  final TextEditingController _currentPageController = TextEditingController(text: '0');
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isPublic = false;
-  bool _datesExpanded = false;
   bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _reviewController.dispose();
+    _currentPageController.dispose();
+    super.dispose();
+  }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final picked = await showDatePicker(
@@ -31,10 +38,11 @@ class _LogBookModalState extends State<LogBookModal> {
     );
     if (picked != null) {
       setState(() {
-        if (isStart)
+        if (isStart) {
           _startDate = picked;
-        else
+        } else {
           _endDate = picked;
+        }
       });
     }
   }
@@ -61,7 +69,8 @@ class _LogBookModalState extends State<LogBookModal> {
         'finish_date': _endDate != null
             ? DateFormat('yyyy-MM-dd').format(_endDate!)
             : null,
-        'is_log_public': _isPublic
+        'is_log_public': _isPublic,
+        'current_page': int.tryParse(_currentPageController.text) ?? 0
       }
     };
 
@@ -81,12 +90,10 @@ class _LogBookModalState extends State<LogBookModal> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Usamos FractionallySizedBox para asegurar el 90% de pantalla sin forzar cálculos pesados
     return FractionallySizedBox(
       heightFactor: 0.9,
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        // 2. ¡LA MAGIA! Scaffold maneja el teclado nativamente sin repintar toda tu UI
         resizeToAvoidBottomInset: true,
         body: Container(
           decoration: BoxDecoration(
@@ -95,7 +102,6 @@ class _LogBookModalState extends State<LogBookModal> {
           ),
           child: Column(
             children: [
-              // HEADER (100% aislado del teclado)
               AppBar(
                 backgroundColor: Colors.transparent,
                 elevation: 0,
@@ -121,24 +127,29 @@ class _LogBookModalState extends State<LogBookModal> {
                 ],
               ),
 
-              // CONTENIDO SCROLLABLE (El Scaffold lo encogerá suavemente cuando el teclado suba)
               Expanded(
                 child: ListView(
-                  padding:
-                      const EdgeInsets.all(16), // Volvemos al padding normal
+                  padding: const EdgeInsets.all(16),
                   children: [
                     Row(
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: CachedNetworkImage(
-                            imageUrl: widget.book['cover_url'] ??
-                                'https://via.placeholder.com/60x90',
+                            imageUrl: widget.book['cover_url'] ?? '',
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
                             width: 60,
                             height: 90,
                             fit: BoxFit.cover,
-                            errorWidget: (context, url, error) =>
-                                const Icon(Icons.auto_stories),
+                            errorWidget: (context, url, error) => Container(
+                              width: 60,
+                              height: 90,
+                              color: Theme.of(context)
+                                  .primaryColor
+                                  .withValues(alpha: 0.2),
+                              child: const Icon(Icons.auto_stories),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -170,7 +181,7 @@ class _LogBookModalState extends State<LogBookModal> {
                           label: Text(status.toUpperCase()),
                           selected: isActive,
                           selectedColor:
-                              Theme.of(context).primaryColor.withOpacity(0.2),
+                              Theme.of(context).primaryColor.withValues(alpha: 0.2),
                           labelStyle: TextStyle(
                               color: isActive
                                   ? Theme.of(context).primaryColor
@@ -179,6 +190,34 @@ class _LogBookModalState extends State<LogBookModal> {
                         );
                       }).toList(),
                     ),
+                    if (_status == 'leyendo') ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Text('Página actual:',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 100,
+                            child: TextField(
+                              controller: _currentPageController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: '0',
+                                suffixText: widget.book['page_count'] != null
+                                    ? '/ ${widget.book['page_count']}'
+                                    : '',
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     if (_status != 'leyendo') ...[
                       const Text('Tu calificación',
@@ -207,8 +246,6 @@ class _LogBookModalState extends State<LogBookModal> {
                             style: TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 14)),
                         tilePadding: EdgeInsets.zero,
-                        onExpansionChanged: (val) =>
-                            setState(() => _datesExpanded = val),
                         children: [
                           ListTile(
                             contentPadding: EdgeInsets.zero,
@@ -256,7 +293,7 @@ class _LogBookModalState extends State<LogBookModal> {
                           ? 'Visible en tu perfil y feed'
                           : 'Solo tú puedes verlo'),
                       value: _isPublic,
-                      activeColor: Theme.of(context).primaryColor,
+                      activeThumbColor: Theme.of(context).primaryColor,
                       secondary:
                           Icon(_isPublic ? Icons.public : Icons.lock_outline),
                       onChanged: (val) => setState(() => _isPublic = val),

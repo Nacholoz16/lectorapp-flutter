@@ -14,7 +14,7 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
-  Timer? _debounce; // El temporizador para no saturar la API
+  Timer? _debounce;
 
   bool _isLoading = false;
   List<dynamic> _results = [];
@@ -22,12 +22,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel(); // Limpiamos la memoria al salir
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  // Equivalente a tu onSearchChange
   void _onSearchChanged(String query) {
     setState(() => _searchTerm = query);
 
@@ -41,7 +40,6 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
-    // Esperamos medio segundo sin que el usuario teclee para buscar
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _performSearch(query);
     });
@@ -50,27 +48,37 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _performSearch(String query) async {
     setState(() => _isLoading = true);
     try {
-      // res ya es directamente la List<dynamic> gracias a nuestro servicio
       final res = await BookService().searchBooks(query);
 
-      setState(() {
-        _results = res;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _results = res;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print("Error en búsqueda: $e");
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error en la búsqueda: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  // Equivalente a tu presentOptions (El ActionSheet)
   void _presentOptions(BuildContext context, dynamic book) {
+    // Guardamos referencia al ScaffoldMessenger antes de abrir el modal
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -79,21 +87,18 @@ class _SearchScreenState extends State<SearchScreen> {
                 leading: const Icon(Icons.add_circle_outline),
                 title: const Text('Registrar Lectura'),
                 onTap: () async {
-                  Navigator.pop(context); // Cerramos el Action Sheet primero
+                  Navigator.pop(sheetContext); // Cerramos el Action Sheet
 
                   // Abrimos el Modal de Registro
                   final result = await showModalBottomSheet(
                     context: context,
-                    isScrollControlled:
-                        true, // Esto permite que ocupe el 90% de pantalla
-                    backgroundColor: Colors
-                        .transparent, // Para que las esquinas curvas se vean
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
                     builder: (context) => LogBookModal(book: book),
                   );
 
-                  // Si devuelve 'saved: true' mostramos el mensajito verde (Toast)
                   if (result != null && result['saved'] == true) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    scaffoldMessenger.showSnackBar(
                       const SnackBar(
                           content: Text('¡Libro registrado exitosamente!'),
                           backgroundColor: Colors.green),
@@ -105,7 +110,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ListTile(
                 leading: const Icon(Icons.close),
                 title: const Text('Cancelar'),
-                onTap: () => Navigator.pop(context),
+                onTap: () => Navigator.pop(sheetContext),
               ),
             ],
           ),
@@ -119,7 +124,6 @@ class _SearchScreenState extends State<SearchScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Buscar Libros'),
-        // La barra de búsqueda anclada abajo del título (estilo iOS/Ionic)
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -179,7 +183,7 @@ class _SearchScreenState extends State<SearchScreen> {
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             elevation: 0,
-            color: Theme.of(context).cardColor, // Tu var(--ion-item-background)
+            color: Theme.of(context).cardColor,
             child: ListTile(
               contentPadding: const EdgeInsets.all(8),
               leading: SizedBox(
@@ -222,7 +226,8 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    if (_searchTerm.length > 3 && _results.isEmpty) {
+    // Corregido: >= 3 (la búsqueda se dispara con 3 caracteres)
+    if (_searchTerm.length >= 3 && _results.isEmpty) {
       return const Center(child: Text('No encontramos libros con ese nombre.'));
     }
 
@@ -231,7 +236,7 @@ class _SearchScreenState extends State<SearchScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.search,
-              size: 64, color: Theme.of(context).primaryColor.withOpacity(0.4)),
+              size: 64, color: Theme.of(context).primaryColor.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           Text('Busca para agregar a tu lista.',
               style: TextStyle(color: Colors.grey[600])),

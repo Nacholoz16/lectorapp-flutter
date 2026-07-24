@@ -2,9 +2,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/user_service.dart';
-import 'login_screen.dart'; // Para volver al login tras cerrar sesión
+import '../models/user_profile.dart';
+import '../models/reading_log.dart';
+import 'login_screen.dart';
 import '../widgets/edit_book_modal.dart';
+import '../widgets/reading_timer_modal.dart';
+import '../widgets/book_stats_modal.dart';
 import '../services/theme_service.dart';
+import '../book_cover.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,34 +18,224 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  final ScrollController _scrollController = ScrollController();
+
   bool _isLoading = true;
-  Map<String, dynamic>? _profile;
+  UserProfile? _profile;
+
+  int _page = 1;
+  final int _limit = 10;
+  bool _hasMore = true;
+  bool _isFetchingMore = false;
+
+  int _selectedTab = 0; // 0: Biblioteca, 1: Estadísticas
+  Map<String, dynamic>? _stats;
+  bool _isLoadingStats = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadMyProfile();
   }
 
-  Future<void> _loadMyProfile() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadStats() async {
+    if (_profile == null) return;
+    setState(() => _isLoadingStats = true);
     try {
-      final currentUser = await AuthService().getCurrentUser();
-      if (currentUser != null && currentUser['username'] != null) {
-        final data = await UserService().getProfile(currentUser['username']);
+      final res = await UserService().getUserStats(_profile!.username);
+      if (mounted) {
         setState(() {
-          _profile = data;
-          _isLoading = false;
+          _stats = res;
+          _isLoadingStats = false;
         });
       }
-    } catch (e) {
-      print("Error cargando perfil: $e");
-      setState(() => _isLoading = false);
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingStats = false);
     }
   }
 
-  // Helper de colores igual a tu getStatusColor de TS
+  void _openTimerModal() async {
+    if (_profile == null) return;
+    final readingLogs = _profile!.library
+        .where((l) => l.status.toLowerCase() == 'leyendo')
+        .map((l) => {
+              'id': l.id,
+              'title': l.title,
+              'current_page': l.currentPage,
+              'page_count': l.pageCount,
+            })
+        .toList();
+
+    final result = await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ReadingTimerModal(readingLogs: readingLogs),
+    );
+
+    if (result != null && result['saved'] == true) {
+      _loadMyProfile();
+    }
+  }
+
+  void _openEditGoalDialog() {
+    final controller = TextEditingController(
+        text: (_stats?['target_books_this_year'] ?? 10).toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Meta de Lectura Anual'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '¿Cuántos libros quieres leer este año?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final val = int.tryParse(controller.text);
+              if (val != null && val > 0) {
+                Navigator.pop(context);
+                await UserService().setReadingGoal(val);
+                _loadStats();
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_isFetchingMore &&
+        _hasMore &&
+        !_isLoading) {
+      _fetchMore();
+    }
+  }
+
+  Future<void> _loadMyProfile() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _page = 1;
+        _hasMore = true;
+        _isFetchingMore = false;
+      });
+    }
+    try {
+      final currentUser = await AuthService().getCurrentUser();
+      if (currentUser != null && currentUser['username'] != null) {
+        final username = currentUser['username'];
+        final profileData = await UserService().getProfile(username);
+        
+        List<dynamic> libraryData = [];
+        try {
+          libraryData = await UserService().getUserLibrary(username,
+              page: _page, limit: _limit);
+          profileData['library'] = libraryData;
+        } catch (_) {
+          // Si el servidor de producción aún no ha desplegado /users/:username/library (da 404),
+          // usamos la biblioteca que vino incluida en profileData.
+          if (profileData['library'] is List) {
+            libraryData = profileData['library'];
+          }
+          _hasMore = false; // No reintentar paginación posterior si el endpoint no existe en prod
+        }
+
+        if (mounted) {
+          setState(() {
+            _profile = UserProfile.fromJson(profileData);
+            _isLoading = false;
+            if (libraryData.length < _limit) {
+              _hasMore = false;
+            }
+          });
+          _loadStats();
+        }
+      } else {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo obtener los datos de la sesión'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar el perfil: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Reintentar',
+              textColor: Colors.white,
+              onPressed: _loadMyProfile,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _fetchMore() async {
+    if (_isFetchingMore || !_hasMore || _profile == null) return;
+    setState(() => _isFetchingMore = true);
+
+    try {
+      final nextPage = _page + 1;
+      final libraryData = await UserService().getUserLibrary(_profile!.username,
+          page: nextPage, limit: _limit);
+
+      final newLogs =
+          libraryData.map((item) => ReadingLog.fromJson(item)).toList();
+
+      if (mounted) {
+        setState(() {
+          _page = nextPage;
+          _profile!.library.addAll(newLogs);
+          _isFetchingMore = false;
+          if (libraryData.length < _limit) {
+            _hasMore = false;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isFetchingMore = false;
+          _hasMore = false;
+        });
+      }
+    }
+  }
+
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'terminado':
@@ -60,12 +255,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false, // Elimina todo el historial de navegación
+        (route) => false,
       );
     }
   }
 
-  // Reemplazo de tu ActionSheet de Temas
   void _onOpenThemeSheet() {
     showModalBottomSheet(
       context: context,
@@ -114,25 +308,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mi Biblioteca'),
         actions: [
-          // Tu <ion-popover> convertido a menú nativo
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings_outlined),
             onSelected: (value) {
-              if (value == 'edit') print('Editar perfil');
               if (value == 'theme') _onOpenThemeSheet();
               if (value == 'logout') _onLogout();
             },
             itemBuilder: (BuildContext context) => [
-              const PopupMenuItem(
-                  value: 'edit',
-                  child: ListTile(
-                      leading: Icon(Icons.edit_outlined),
-                      title: Text('Editar Perfil'),
-                      contentPadding: EdgeInsets.zero)),
               const PopupMenuItem(
                   value: 'theme',
                   child: ListTile(
@@ -151,49 +338,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child:
-                  CircularProgressIndicator()) // Simplificado para no llenar el código de skeletons ahora
+          ? const Center(child: CircularProgressIndicator())
           : _profile == null
-              ? const Center(child: Text('No se pudo cargar el perfil'))
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      const Text('No se pudo cargar el perfil'),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadMyProfile,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                )
               : _buildProfileContent(),
     );
   }
 
   Widget _buildProfileContent() {
-    String avatarUrl = _profile!['avatar_url'] ??
-        'https://api.dicebear.com/7.x/bottts/png?seed=${_profile!['username']}';
-    if (avatarUrl.contains('/svg'))
-      avatarUrl = avatarUrl.replaceAll('/svg', '/png');
-
-    final library = _profile!['library'] as List<dynamic>? ?? [];
+    final library = _profile!.library;
     final primaryColor = Theme.of(context).primaryColor;
 
     return RefreshIndicator(
       onRefresh: _loadMyProfile,
       color: primaryColor,
       child: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(vertical: 24),
         children: [
-          // CABECERA PERFIL (Avatar con aro exterior)
+          // CABECERA PERFIL
           Center(
             child: Container(
-              padding: const EdgeInsets.all(4), // Espacio para el aro
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border:
-                    Border.all(color: primaryColor.withOpacity(0.3), width: 3),
+                    Border.all(color: primaryColor.withValues(alpha: 0.3), width: 3),
               ),
               child: CircleAvatar(
                 radius: 54,
-                backgroundColor: primaryColor.withOpacity(0.1),
-                backgroundImage: CachedNetworkImageProvider(avatarUrl),
+                backgroundColor: primaryColor.withValues(alpha: 0.1),
+                backgroundImage:
+                    CachedNetworkImageProvider(_profile!.safeAvatarUrl),
               ),
             ),
           ),
           const SizedBox(height: 20),
           Text(
-            _profile!['username'] ?? '',
+            _profile!.username,
             textAlign: TextAlign.center,
             style: const TextStyle(
                 fontSize: 26, fontWeight: FontWeight.w800, fontFamily: 'Lora'),
@@ -202,7 +400,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40.0),
             child: Text(
-              _profile!['bio'] ?? 'Sin biografía aún...',
+              _profile!.bio ?? 'Sin biografía aún...',
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: Colors.grey.shade600,
@@ -212,37 +410,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Chip de perfil suave
           // Chip de perfil dinámico
           Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                // Si es público, usa un tinte del color del tema. Si es privado, un gris sutil.
-                color: _profile!['is_profile_public'] == true
-                    ? primaryColor.withOpacity(0.15)
-                    : Colors.grey.withOpacity(0.1),
+                color: _profile!.isProfilePublic
+                    ? primaryColor.withValues(alpha: 0.15)
+                    : Colors.grey.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    _profile!['is_profile_public'] == true
+                    _profile!.isProfilePublic
                         ? Icons.public_rounded
                         : Icons.lock_outline_rounded,
                     size: 16,
-                    color: _profile!['is_profile_public'] == true
+                    color: _profile!.isProfilePublic
                         ? primaryColor
                         : Colors.grey[600],
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _profile!['is_profile_public'] == true
+                    _profile!.isProfilePublic
                         ? 'Perfil Público'
                         : 'Perfil Privado',
                     style: TextStyle(
-                      color: _profile!['is_profile_public'] == true
+                      color: _profile!.isProfilePublic
                           ? primaryColor
                           : Colors.grey[600],
                       fontWeight: FontWeight.bold,
@@ -254,44 +450,132 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          // Tab Selector
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Text('Mis Lecturas (${library.length})',
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Lora')),
-          ),
-          const SizedBox(height: 8),
-
-          // LISTA DE LIBROS LITERARIA
-          if (library.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(40.0),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.auto_stories_rounded,
-                        size: 64, color: Colors.grey.withOpacity(0.3)),
-                    const SizedBox(height: 16),
-                    Text('Aún no has registrado lecturas.',
-                        style: TextStyle(color: Colors.grey.shade500)),
-                  ],
-                ),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(16),
               ),
-            )
-          else
-            ...library.map((log) => _buildBookCard(log)).toList(),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedTab = 0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _selectedTab == 0
+                              ? primaryColor.withValues(alpha: 0.15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Biblioteca (${library.length})',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _selectedTab == 0 ? primaryColor : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedTab = 1),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _selectedTab == 1
+                              ? primaryColor.withValues(alpha: 0.15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Estadísticas',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _selectedTab == 1 ? primaryColor : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          if (_selectedTab == 0) ...[
+            if (library.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(40.0),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.auto_stories_rounded,
+                          size: 64, color: Colors.grey.withValues(alpha: 0.3)),
+                      const SizedBox(height: 16),
+                      Text('Aún no has registrado lecturas.',
+                          style: TextStyle(color: Colors.grey.shade500)),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              ...library.map((log) => _buildBookCard(log)),
+              if (_hasMore)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: primaryColor,
+                    ),
+                  ),
+                ),
+            ],
+          ] else ...[
+            _buildStatsContent(),
+          ],
         ],
       ),
     );
   }
 
-  // Tarjeta de libro en la biblioteca (equivalente a tu .book-card en SCSS)
-  Widget _buildBookCard(Map<String, dynamic> log) {
+  Widget _buildBookCard(ReadingLog log) {
     final primaryColor = Theme.of(context).primaryColor;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final logMap = {
+      'id': log.id,
+      'title': log.title,
+      'author': log.authors,
+      'authors': log.authors,
+      'cover_url': log.coverUrl,
+      'cover_image': log.coverUrl,
+      'external_id': log.externalId,
+      'status': log.status,
+      'rating': log.rating,
+      'review_text': log.reviewText,
+      'start_date': log.startDate?.toIso8601String(),
+      'finish_date': log.finishDate?.toIso8601String(),
+      'is_log_public': log.isLogPublic,
+      'page_count': log.pageCount,
+      'isbn': log.isbn,
+      'published_year': log.publishedYear,
+      'current_page': log.currentPage,
+    };
+
+    final double progress = (log.pageCount != null && log.pageCount! > 0)
+        ? (log.currentPage / log.pageCount!).clamp(0.0, 1.0)
+        : 0.0;
+    final int percentage = (progress * 100).round();
 
     return InkWell(
       onTap: () async {
@@ -299,7 +583,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
-          builder: (context) => EditBookModal(readingLog: log),
+          builder: (context) => EditBookModal(readingLog: logMap),
         );
         if (result != null &&
             (result['action'] == 'updated' || result['action'] == 'deleted')) {
@@ -312,42 +596,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
           border: Border(
               bottom: BorderSide(
                   color: (isDark ? Colors.white : Colors.black)
-                      .withOpacity(0.05))),
+                      .withValues(alpha: 0.05))),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Miniatura Flotante
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(
-                      color: primaryColor.withOpacity(0.2),
+                      color: primaryColor.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4)),
                 ],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  log['cover_image'] ??
-                      log['cover_url'] ??
-                      'https://via.placeholder.com/50x75',
-                  width: 50,
-                  height: 75,
-                  fit: BoxFit.cover,
+              child: SizedBox(
+                width: 50,
+                height: 75,
+                child: BookCover(
+                  src: log.coverUrl,
+                  title: log.title ?? '',
+                  author: log.authors ?? '',
                 ),
               ),
             ),
             const SizedBox(width: 16),
-            // Textos
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    log['title'] ?? '',
+                    log.title ?? '',
                     style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 17,
@@ -357,56 +637,317 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Text(log['author'] ?? log['authors'] ?? '',
+                  Text(log.authors ?? '',
                       style:
                           TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                   const SizedBox(height: 8),
-
-                  // Fila inferior: Estado y Estrellas
                   Row(
                     children: [
-                      if (log['status'] != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(log['status'])
-                                .withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            log['status'].toString().toUpperCase(),
-                            style: TextStyle(
-                                color: _getStatusColor(log['status']),
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5),
-                          ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(log.status)
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        child: Text(
+                          log.status.toUpperCase(),
+                          style: TextStyle(
+                              color: _getStatusColor(log.status),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5),
+                        ),
+                      ),
                       const Spacer(),
-                      if (log['rating'] != null)
+                      IconButton(
+                        icon: const Icon(Icons.bar_chart_rounded, size: 20),
+                        tooltip: 'Ver Estadísticas',
+                        color: primaryColor,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => BookStatsModal(readingLog: logMap),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        tooltip: 'Editar',
+                        color: Colors.grey.shade600,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () async {
+                          final result = await showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => EditBookModal(readingLog: logMap),
+                          );
+                          if (result != null &&
+                              (result['action'] == 'updated' || result['action'] == 'deleted')) {
+                            _loadMyProfile();
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      if (log.rating != null && log.status != 'leyendo') ...[
                         Row(
                           children: [
                             const Icon(Icons.star_rounded,
                                 color: Color(0xFFFFD54F), size: 18),
-                            const SizedBox(width: 4),
-                            Text('${log['rating']}',
+                            const SizedBox(width: 2),
+                            Text('${log.rating}',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.grey.shade700)),
                           ],
                         ),
-                      const SizedBox(width: 12),
-                      if (log['is_log_public'] == false)
+                        const SizedBox(width: 8),
+                      ],
+                      if (!log.isLogPublic)
                         Icon(Icons.lock_outline_rounded,
                             size: 16, color: Colors.grey.shade400),
                     ],
                   ),
+                  if (log.status.toLowerCase() == 'leyendo') ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          log.pageCount != null
+                              ? '${log.currentPage} / ${log.pageCount} pág.'
+                              : '${log.currentPage} pág.',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                        if (log.pageCount != null)
+                          Text(
+                            '$percentage%',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: primaryColor),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 5,
+                        backgroundColor: primaryColor.withValues(alpha: 0.15),
+                        color: primaryColor,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatsContent() {
+    final primaryColor = Theme.of(context).primaryColor;
+    if (_isLoadingStats) {
+      return const Padding(
+        padding: EdgeInsets.all(40.0),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final totalMinutes = _stats?['total_minutes'] ?? 0;
+    final hours = (totalMinutes / 60).floor();
+    final minutes = totalMinutes % 60;
+    final timeStr = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
+
+    final totalPages = _stats?['total_pages'] ?? 0;
+    final finishedThisYear = _stats?['finished_books_this_year'] ?? 0;
+    final targetBooks = _stats?['target_books_this_year'] ?? 10;
+    final avgRating = _stats?['avg_rating'] ?? '0.0';
+    final double goalProgress = (targetBooks > 0 ? finishedThisYear / targetBooks : 0.0).clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Column(
+        children: [
+          // Botón Iniciar Lectura con Timer
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _openTimerModal,
+              icon: const Icon(Icons.timer_outlined, size: 22),
+              label: const Text('Iniciar Sesión de Lectura',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Reto Anual
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        value: goalProgress,
+                        strokeWidth: 6,
+                        backgroundColor: primaryColor.withValues(alpha: 0.15),
+                        color: primaryColor,
+                      ),
+                      Center(
+                        child: Text(
+                          '${(goalProgress * 100).round()}%',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: primaryColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.emoji_events_outlined, size: 20, color: primaryColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Reto ${_stats?['year'] ?? 2026}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            onPressed: _openEditGoalDialog,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$finishedThisYear de $targetBooks libros leídos este año',
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Cuadrícula de Métricas
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.access_time_filled_rounded,
+                  iconColor: const Color(0xFF4995FF),
+                  title: 'Tiempo Total',
+                  value: timeStr,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.menu_book_rounded,
+                  iconColor: const Color(0xFF66BB6A),
+                  title: 'Páginas Leídas',
+                  value: '$totalPages pág.',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.check_circle_rounded,
+                  iconColor: const Color(0xFFAB47BC),
+                  title: 'Terminados',
+                  value: '${_stats?['finished_books'] ?? 0} libros',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricCard(
+                  icon: Icons.star_rounded,
+                  iconColor: const Color(0xFFFFD54F),
+                  title: 'Promedio Stars',
+                  value: '$avgRating ⭐',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 24),
+          const SizedBox(height: 12),
+          Text(value,
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 2),
+          Text(title,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+        ],
       ),
     );
   }

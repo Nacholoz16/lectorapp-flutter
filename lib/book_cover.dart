@@ -19,14 +19,12 @@ class BookCover extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(16.0), // Bordes suaves para el libro
+        borderRadius: BorderRadius.circular(16.0),
         boxShadow: [
           BoxShadow(
-            color:
-                primaryColor.withOpacity(0.2), // Sombra coloreada y translúcida
+            color: primaryColor.withValues(alpha: 0.2),
             blurRadius: 20,
-            offset: const Offset(0, 10), // Cae suavemente hacia abajo
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -35,10 +33,10 @@ class BookCover extends StatelessWidget {
         child: src != null && src!.isNotEmpty
             ? CachedNetworkImage(
                 imageUrl: src!,
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
                 fit: BoxFit.cover,
-                // Mientras descarga la primera vez, mostramos tu diseño Lora
                 placeholder: (context, url) => _buildPlaceholder(context),
-                // Si la URL está rota o no hay internet, mostramos tu diseño
                 errorWidget: (context, url, error) =>
                     _buildPlaceholder(context),
               )
@@ -55,8 +53,8 @@ class BookCover extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            primaryColor.withOpacity(0.4),
-            primaryColor.withOpacity(0.8),
+            primaryColor.withValues(alpha: 0.4),
+            primaryColor.withValues(alpha: 0.8),
           ],
         ),
       ),
@@ -68,7 +66,7 @@ class BookCover extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontFamily: 'Lora', // Toque literario para las portadas vacías
+            fontFamily: 'Lora',
             fontSize: 12,
           ),
         ),

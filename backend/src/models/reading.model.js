@@ -1,0 +1,116 @@
+const db = require('../config/db');
+
+class ReadingModel {
+    // Crear un nuevo registro de lectura
+    static async create(data) {
+        const [result] = await db.execute(
+            `INSERT INTO reading_logs 
+            (user_id, book_id, status, rating, start_date, finish_date, duration_days, review_text, is_log_public) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [data.user_id, data.book_id, data.status, data.rating, data.start_date, data.finish_date, data.duration_days, data.review_text, data.is_log_public]
+        );
+        return result.insertId;
+    }
+
+    // Verificar si el usuario ya registró este libro antes (para evitar duplicados o permitir re-lecturas)
+    static async findByUserAndBook(userId, bookId) {
+        const [rows] = await db.execute('SELECT * FROM reading_logs WHERE user_id = ? AND book_id = ?', [userId, bookId]);
+        return rows[0];
+    }
+
+    // 1. OBTENER FEED PÚBLICO DE UN LIBRO
+    // Solo trae registros marcados como públicos (is_log_public = 1)
+    static async getPublicFeedByBookId(bookId) {
+        const [rows] = await db.execute(`
+            SELECT 
+                r.id, r.status, r.rating, r.duration_days, r.review_text, r.updated_at,
+                u.username, u.avatar_url, u.is_profile_public
+            FROM reading_logs r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.book_id = ? AND r.is_log_public = 1
+            ORDER BY r.created_at DESC
+        `, [bookId]);
+        return rows;
+    }
+
+    // 2. OBTENER BIBLIOTECA DE UN USUARIO (Versión Dueño)
+    // El dueño ve TODO (público y privado)
+    static async getAllByUserId(userId, limit = 10, offset = 0) {
+        const [rows] = await db.execute(`
+            SELECT 
+                r.*, 
+                b.title, b.author, b.cover_url, b.external_id, b.page_count, b.isbn, b.published_year
+            FROM reading_logs r
+            JOIN books b ON r.book_id = b.id
+            WHERE r.user_id = ?
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        `, [userId.toString(), limit.toString(), offset.toString()]);
+        return rows;
+    }
+
+    // 3. OBTENER BIBLIOTECA DE UN USUARIO (Versión Visitante)
+    // El visitante solo ve lo marcado como público
+    static async getPublicByUserId(userId, limit = 10, offset = 0) {
+        const [rows] = await db.execute(`
+            SELECT 
+                r.id, r.status, r.rating, r.duration_days, r.review_text, r.updated_at,
+                b.title, b.author, b.cover_url, b.external_id, b.page_count
+            FROM reading_logs r
+            JOIN books b ON r.book_id = b.id
+            WHERE r.user_id = ? 
+              AND r.is_log_public = 1 -- FILTRO DE PRIVACIDAD
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        `, [userId.toString(), limit.toString(), offset.toString()]);
+        return rows;
+    }
+
+    // 4. FEED GLOBAL (Lo último que se ha leído en la plataforma)
+    static async getGlobalFeed(limit = 10, offset = 0) {
+        const [rows] = await db.execute(`
+            SELECT 
+                r.id, r.status, r.rating, r.review_text, r.created_at, r.duration_days,
+                b.title, b.author, b.cover_url, b.external_id, b.isbn, b.page_count, b.published_year,
+                u.username, u.avatar_url
+            FROM reading_logs r
+            JOIN books b ON r.book_id = b.id
+            JOIN users u ON r.user_id = u.id
+            WHERE r.is_log_public = 1 
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        `, [limit.toString(), offset.toString()]);
+        return rows;
+    }
+
+    static async update(id, userId, data) {
+        const [result] = await db.execute(
+            `UPDATE reading_logs 
+             SET status = ?, rating = ?, start_date = ?, finish_date = ?, duration_days = ?, review_text = ?, is_log_public = ?
+             WHERE id = ? AND user_id = ?`,
+            [
+                data.status, 
+                data.rating, 
+                data.start_date || null, 
+                data.finish_date || null, 
+                data.duration_days, 
+                data.review_text, 
+                data.is_log_public, 
+                id, 
+                userId
+            ]
+        );
+        return result;
+    }
+
+    // Eliminar una lectura (Validando propiedad con user_id)
+    static async delete(id, userId) {
+        const [result] = await db.execute(
+            'DELETE FROM reading_logs WHERE id = ? AND user_id = ?',
+            [id, userId]
+        );
+        return result;
+    }
+}
+
+module.exports = ReadingModel;

@@ -1,92 +1,75 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'api_client.dart';
 
 class ReadingService {
-  final String baseUrl = 'https://api.nacholoz3d.cl/api';
+  static final ReadingService _instance = ReadingService._internal();
+  factory ReadingService() => _instance;
+  ReadingService._internal();
+  final _api = ApiClient();
 
-  Future<List<dynamic>> getGlobalFeed() async {
-    final token = await AuthService().getToken();
+  Future<List<dynamic>> getGlobalFeed({int page = 1, int limit = 10}) async {
+    final data = await _api.get('/readings/feed?page=$page&limit=$limit');
+    if (data is List) return data;
+    return [];
+  }
 
-    final response = await http.get(
-      Uri.parse('$baseUrl/readings/feed'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token', // Simulamos el Interceptor de Angular
-      },
-    );
+  static const String _feedCacheKey = 'cached_global_feed';
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw Exception('Error al cargar el feed');
+  Future<void> saveCachedFeed(List<dynamic> feed) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_feedCacheKey, json.encode(feed));
+  }
+
+  Future<List<dynamic>?> getCachedFeed() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? cachedStr = prefs.getString(_feedCacheKey);
+    if (cachedStr != null) {
+      try {
+        final data = json.decode(cachedStr);
+        if (data is List) return data;
+      } catch (_) {}
     }
-  } // 1. Crear nueva lectura
+    return null;
+  }
 
   Future<void> createLog(Map<String, dynamic> payload) async {
-    final token = await AuthService().getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/readings'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode(payload),
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Error al crear el registro de lectura');
-    }
+    await _api.post('/readings', body: payload);
   }
 
-  // 2. Obtener biblioteca personal
-  Future<List<dynamic>> getMyLibrary() async {
-    final token = await AuthService().getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/readings/my-library'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw Exception('Error al cargar la biblioteca personal');
-    }
+  Future<List<dynamic>> getMyLibrary({int page = 1, int limit = 10}) async {
+    final data = await _api.get('/readings/my-library?page=$page&limit=$limit');
+    if (data is List) return data;
+    return [];
   }
 
-  // 3. Actualizar lectura
   Future<void> updateLog(String id, Map<String, dynamic> payload) async {
-    final token = await AuthService().getToken();
-    final response = await http.put(
-      Uri.parse('$baseUrl/readings/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode(payload),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Error al actualizar la lectura');
-    }
+    await _api.put('/readings/$id', body: payload);
   }
 
-  // 4. Eliminar lectura
   Future<void> deleteLog(String id) async {
-    final token = await AuthService().getToken();
-    final response = await http.delete(
-      Uri.parse('$baseUrl/readings/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    await _api.delete('/readings/$id');
+  }
 
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Error al eliminar la lectura');
-    }
+  Future<Map<String, dynamic>> toggleLike(int readingLogId) async {
+    final data = await _api.post('/readings/$readingLogId/like');
+    return data as Map<String, dynamic>;
+  }
+
+  Future<void> recordSession(int readingLogId,
+      {required int durationMinutes,
+      required int pagesRead,
+      int? currentPage}) async {
+    await _api.post('/readings/$readingLogId/session', body: {
+      'duration_minutes': durationMinutes,
+      'pages_read': pagesRead,
+      if (currentPage != null) 'current_page': currentPage,
+    });
+  }
+
+  Future<Map<String, dynamic>> getBookStats(int readingLogId) async {
+    final data = await _api.get('/readings/$readingLogId/stats');
+    return data as Map<String, dynamic>;
   }
 }
+

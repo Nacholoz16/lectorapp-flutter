@@ -47,11 +47,11 @@ class ThemeService {
     );
   }
 
-  // --- NUEVO: Color del cursor y selección de texto ---
+  // --- Color del cursor y selección de texto ---
   static TextSelectionThemeData _buildTextSelection(Color color) {
     return TextSelectionThemeData(
       cursorColor: color,
-      selectionColor: color.withOpacity(0.3),
+      selectionColor: color.withValues(alpha: 0.3),
       selectionHandleColor: color,
     );
   }
@@ -89,7 +89,7 @@ class ThemeService {
     ),
     cardTheme:
         CardThemeData(shape: _bubbleShape, elevation: 0, color: Colors.white),
-    inputDecorationTheme: _buildInputDecoration(Colors.black.withOpacity(0.03)),
+    inputDecorationTheme: _buildInputDecoration(Colors.black.withValues(alpha: 0.03)),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF8BA89F),
@@ -106,9 +106,9 @@ class ThemeService {
     primaryColor: const Color(0xffff6b8a), // Rosa palo
     textSelectionTheme: _buildTextSelection(const Color(0xFFD8A7B1)),
     scaffoldBackgroundColor:
-        const Color(0xFFFEF9FA), // <-- NUEVO: Crema rosado muy sutil
+        const Color(0xFFFEF9FA), // Crema rosado muy sutil
     appBarTheme: _salviaTheme.appBarTheme
-        .copyWith(backgroundColor: const Color(0xFFFEF9FA)), // <-- NUEVO
+        .copyWith(backgroundColor: const Color(0xFFFEF9FA)),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: Color(0xFFD8A7B1),
       foregroundColor: Colors.white,
@@ -136,9 +136,9 @@ class ThemeService {
     primaryColor: const Color(0xFFA1C4D0), // Celeste agrisado
     textSelectionTheme: _buildTextSelection(const Color(0xFFA1C4D0)),
     scaffoldBackgroundColor:
-        const Color(0xFFF7FBFD), // <-- NUEVO: Crema azulado muy sutil
+        const Color(0xFFF7FBFD), // Crema azulado muy sutil
     appBarTheme: _salviaTheme.appBarTheme
-        .copyWith(backgroundColor: const Color(0xFFF7FBFD)), // <-- NUEVO
+        .copyWith(backgroundColor: const Color(0xFFF7FBFD)),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: Color(0xFFA1C4D0),
       foregroundColor: Colors.white,
@@ -191,7 +191,7 @@ class ThemeService {
     ),
     cardTheme: CardThemeData(
         shape: _bubbleShape, elevation: 0, color: const Color(0xFF292524)),
-    inputDecorationTheme: _buildInputDecoration(Colors.white.withOpacity(0.05)),
+    inputDecorationTheme: _buildInputDecoration(Colors.white.withValues(alpha: 0.05)),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFFB59E86),
@@ -220,7 +220,6 @@ class ThemeService {
         break;
     }
 
-    // ¡La conexión que faltaba! Guardamos en la memoria del teléfono
     if (save) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_theme', themeName);

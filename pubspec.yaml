@@ -18,6 +18,7 @@ dependencies:
   google_fonts: ^6.2.1
   flutter_displaymode: ^0.6.0
   cached_network_image: ^3.3.1
+  flutter_secure_storage: ^10.3.1
   
 dev_dependencies:
   flutter_test:

@@ -1,12 +1,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:test_lectorapp/book_cover.dart';
 import '../widgets/user_card.dart';
 import '../services/book_service.dart';
 import '../widgets/log_book_modal.dart';
 
 class BookDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> book; // El objeto libro que recibimos del Home
+  final Map<String, dynamic> book;
 
   const BookDetailScreen({super.key, required this.book});
 
@@ -29,19 +30,28 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
         widget.book['google_id'] ??
         widget.book['id'];
     if (id == null) {
-      setState(() => _isLoadingReviews = false);
+      if (mounted) setState(() => _isLoadingReviews = false);
       return;
     }
 
     try {
       final data = await BookService().getBookFeed(id.toString());
-      setState(() {
-        _reviews = data;
-        _isLoadingReviews = false;
-      });
+      if (mounted) {
+        setState(() {
+          _reviews = data;
+          _isLoadingReviews = false;
+        });
+      }
     } catch (e) {
-      print("Error cargando reseñas: $e");
-      setState(() => _isLoadingReviews = false);
+      if (mounted) {
+        setState(() => _isLoadingReviews = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar reseñas: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -61,16 +71,25 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               top: 0,
               left: 0,
               right: 0,
-              height: MediaQuery.of(context).size.height *
-                  0.55, // Solo la mitad superior
+              height: MediaQuery.of(context).size.height * 0.55,
               child: ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                    sigmaX: 40, sigmaY: 40), // Blur muy intenso
-                child: Image.network(coverUrl, fit: BoxFit.cover),
+                imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                child: CachedNetworkImage(
+                  imageUrl: coverUrl,
+                  fadeInDuration: Duration.zero,
+                  fadeOutDuration: Duration.zero,
+                  fit: BoxFit.cover,
+                  errorWidget: (context, url, error) => Container(
+                    color: primaryColor.withValues(alpha: 0.3),
+                  ),
+                  placeholder: (context, url) => Container(
+                    color: primaryColor.withValues(alpha: 0.3),
+                  ),
+                ),
               ),
             ),
 
-          // Gradiente para fundir el fondo borroso con el color Crema/Oscuro del tema
+          // Gradiente para fundir el fondo borroso con el tema
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -79,9 +98,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   end: Alignment.bottomCenter,
                   stops: const [0.1, 0.45, 1.0],
                   colors: [
-                    scaffoldBg.withOpacity(0.3), // Arriba: Cristalino
-                    scaffoldBg.withOpacity(0.9), // Medio: Casi sólido
-                    scaffoldBg, // Abajo: Sólido total (Crema/Marrón)
+                    scaffoldBg.withValues(alpha: 0.3),
+                    scaffoldBg.withValues(alpha: 0.9),
+                    scaffoldBg,
                   ],
                 ),
               ),
@@ -98,7 +117,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     child: Column(
                       children: [
                         const SizedBox(height: 20),
-                        // HERO SECTION (Portada Flotante)
                         Center(
                           child: SizedBox(
                             width: 150,
@@ -114,7 +132,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         ),
                         const SizedBox(height: 32),
 
-                        // TÍTULO (Fuente Lora, grande y literaria)
                         Text(
                           widget.book['title'] ?? 'Sin título',
                           textAlign: TextAlign.center,
@@ -137,13 +154,13 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: primaryColor, // Autor en color pastel
+                            color: primaryColor,
                             letterSpacing: 1.2,
                           ),
                         ),
                         const SizedBox(height: 36),
 
-                        // METADATA ROW (Tarjetas Glassmorphism)
+                        // METADATA ROW
                         Wrap(
                           alignment: WrapAlignment.center,
                           spacing: 16,
@@ -174,7 +191,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         ),
                         const SizedBox(height: 48),
 
-                        // CABECERA DE RESEÑAS
                         Row(
                           children: [
                             const Text(
@@ -189,7 +205,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: primaryColor.withOpacity(0.15),
+                                color: primaryColor.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text('${_reviews.length}',
@@ -221,7 +237,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         child: Column(
                           children: [
                             Icon(Icons.chat_bubble_outline_rounded,
-                                size: 48, color: Colors.grey.withOpacity(0.3)),
+                                size: 48, color: Colors.grey.withValues(alpha: 0.3)),
                             const SizedBox(height: 16),
                             Text('Sé el primero en opinar sobre esta obra.',
                                 style: TextStyle(color: Colors.grey.shade500)),
@@ -243,8 +259,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                     ),
                   ),
 
-                const SliverToBoxAdapter(
-                    child: SizedBox(height: 120)), // Spacer inferior
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],
             ),
           ),
@@ -258,7 +273,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Container(
                   color:
-                      (isDark ? Colors.black : Colors.white).withOpacity(0.2),
+                      (isDark ? Colors.black : Colors.white).withValues(alpha: 0.2),
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back_rounded),
                     onPressed: () => Navigator.pop(context),
@@ -270,9 +285,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
         ],
       ),
 
-      // FAB FLOTANTE SUAVE PARA AÑADIR RESEÑA
+      // FAB
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
+          final messenger = ScaffoldMessenger.of(context);
           final result = await showModalBottomSheet(
             context: context,
             isScrollControlled: true,
@@ -280,27 +296,24 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             builder: (context) => LogBookModal(book: widget.book),
           );
           if (result != null && result['saved'] == true) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('¡Lectura registrada exitosamente!'),
-                    backgroundColor: Colors.green),
-              );
-              _loadReviews();
-            }
+            messenger.showSnackBar(
+              const SnackBar(
+                  content: Text('¡Lectura registrada exitosamente!'),
+                  backgroundColor: Colors.green),
+            );
+            _loadReviews();
           }
         },
         icon: const Icon(Icons.edit_rounded),
         label: const Text('Escribir',
             style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-        elevation: 0, // Sin sombra dura
+        elevation: 0,
         highlightElevation: 0,
         backgroundColor: primaryColor,
       ),
     );
   }
 
-  // WIDGET AUXILIAR: Tarjetas de metadatos con efecto Glassmorphism
   Widget _buildMetaCard(BuildContext context, IconData icon, String label,
       String value, bool isDark) {
     return ClipRRect(
@@ -310,12 +323,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           decoration: BoxDecoration(
-            color: (isDark ? Colors.white : Colors.black)
-                .withOpacity(0.03), // Tinte levísimo
+            color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
                 color:
-                    (isDark ? Colors.white : Colors.black).withOpacity(0.05)),
+                    (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05)),
           ),
           child: Column(
             children: [
