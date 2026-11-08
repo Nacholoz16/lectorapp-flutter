@@ -21,8 +21,25 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # --- Reglas adicionales del proyecto ---
+    # Usar BuildContext después de un await sin comprobar `mounted` (regla 4 del CLAUDE.md).
+    use_build_context_synchronously: true
+    # Un Future sin await ni unawaited() suele ser un error silencioso (excepción perdida).
+    unawaited_futures: true
+    # Cancelar suscripciones a streams (evita fugas, ej. eventos del cronómetro).
+    cancel_subscriptions: true
+    # Cerrar sinks/streams abiertos.
+    close_sinks: true
+    # Widgets const: se reconstruyen menos y ahorran memoria.
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    # Tipar explícitamente lo que expone una API pública (servicios, modelos).
+    always_declare_return_types: true
+    # Evitar catch genérico que se traga errores de programación (TypeError, etc.).
+    avoid_catching_errors: true
+    # Comparaciones con null y tipos más seguras.
+    unnecessary_null_checks: true
+    unrelated_type_equality_checks: true
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

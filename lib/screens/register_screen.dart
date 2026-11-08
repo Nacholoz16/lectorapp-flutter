@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'tabs_screen.dart';
@@ -57,11 +58,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       // Si el registro es exitoso, viajamos directo al Home eliminando el historial
       if (mounted) {
-        Navigator.pushAndRemoveUntil(
+        unawaited(Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const TabsScreen()),
           (route) => false,
-        );
+        ));
       }
     } catch (e) {
       if (mounted) {

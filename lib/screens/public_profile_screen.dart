@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../services/user_service.dart';
@@ -80,7 +81,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           }
         });
         if (_profile != null && _profile!.isProfilePublic) {
-          _loadStats();
+          unawaited(_loadStats());
         }
       }
     } catch (e) {

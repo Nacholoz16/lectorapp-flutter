@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'tabs_screen.dart'; // A donde iremos tras loguearnos
@@ -27,10 +28,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Si el login es exitoso, navegamos a los Tabs (Home) destruyendo la pantalla de login
       if (mounted) {
-        Navigator.pushReplacement(
+        unawaited(Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const TabsScreen()),
-        );
+        ));
       }
     } catch (e) {
       if (mounted) {

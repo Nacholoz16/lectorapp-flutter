@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
@@ -86,7 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
 
     if (result != null && result['saved'] == true) {
-      _loadMyProfile();
+      unawaited(_loadMyProfile());
     }
   }
 
@@ -128,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _saveGoal(int targetBooks) async {
     try {
       await UserService().setReadingGoal(targetBooks);
-      if (mounted) _loadStats();
+      if (mounted) unawaited(_loadStats());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -178,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               _hasMore = false;
             }
           });
-          _loadStats();
+          unawaited(_loadStats());
         }
       } else {
         if (mounted) {
@@ -254,14 +255,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  void _onLogout() async {
+  Future<void> _onLogout() async {
     await AuthService().logout();
     if (mounted) {
-      Navigator.pushAndRemoveUntil(
+      unawaited(Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
         (route) => false,
-      );
+      ));
     }
   }
 
@@ -313,7 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       isProfilePublic: isProfilePublic,
                       areStatsPublic: areStatsPublic,
                     );
-                    _loadMyProfile();
+                    unawaited(_loadMyProfile());
                   },
                   child: const Text('Guardar'),
                 ),
@@ -659,7 +660,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
         if (result != null &&
             (result['action'] == 'updated' || result['action'] == 'deleted')) {
-          _loadMyProfile();
+          unawaited(_loadMyProfile());
         }
       },
       child: Container(
@@ -764,7 +765,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           );
                           if (result != null &&
                               (result['action'] == 'updated' || result['action'] == 'deleted')) {
-                            _loadMyProfile();
+                            unawaited(_loadMyProfile());
                           }
                         },
                       ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:test_lectorapp/services/reading_service.dart';
@@ -48,10 +49,10 @@ class _HomeScreenState extends State<HomeScreen>
           isLoading = false;
         });
       }
-      _checkForNewPosts();
+      unawaited(_checkForNewPosts());
       _prefetchUpcomingCovers(cachedFeed);
     } else {
-      loadFeed();
+      unawaited(loadFeed());
     }
   }
 
@@ -112,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen>
             _hasMore = false;
           }
         });
-        ReadingService().saveCachedFeed(data);
+        unawaited(ReadingService().saveCachedFeed(data));
         _prefetchUpcomingCovers(data);
       }
     } catch (e) {

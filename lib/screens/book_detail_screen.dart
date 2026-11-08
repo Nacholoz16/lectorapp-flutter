@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -313,7 +314,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   content: Text('¡Lectura registrada exitosamente!'),
                   backgroundColor: Colors.green),
             );
-            _loadReviews();
+            unawaited(_loadReviews());
           }
         },
         icon: const Icon(Icons.edit_rounded),

@@ -119,7 +119,7 @@ void onStart(ServiceInstance service) async {
 
     // Detener el servicio
     if (service is AndroidServiceInstance) {
-      service.stopSelf();
+      unawaited(service.stopSelf());
     }
   });
 

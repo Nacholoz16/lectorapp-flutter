@@ -146,10 +146,10 @@ class ApiClient {
       await clearSession();
       final navigator = Config.navigatorKey.currentState;
       if (navigator != null) {
-        navigator.pushAndRemoveUntil(
+        unawaited(navigator.pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false,
-        );
+        ));
       }
     } finally {
       _isRedirectingToLogin = false;
