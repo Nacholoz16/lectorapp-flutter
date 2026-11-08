@@ -9,13 +9,19 @@ class UserService {
         const targetUser = await UserModel.findByUsername(targetUsername);
         if (!targetUser) throw new Error('Usuario no encontrado');
 
+        let libraryData = [];
+        if (requestingUserId === targetUser.id || targetUser.is_profile_public) {
+            libraryData = await this.getLibrary(targetUsername, requestingUserId, 1, 10);
+        }
+
         const profileData = {
             username: targetUser.username,
             bio: targetUser.bio,
             avatar_url: targetUser.avatar_url,
             is_profile_public: !!targetUser.is_profile_public,
+            are_stats_public: !!targetUser.are_stats_public,
             is_own_profile: requestingUserId === targetUser.id,
-            library: []
+            library: libraryData
         };
 
         if (requestingUserId !== targetUser.id && !targetUser.is_profile_public) {
@@ -44,6 +50,27 @@ class UserService {
 
         // 3. Perfil público: solo libros públicos
         return await ReadingModel.getPublicByUserId(targetUser.id, parseInt(limit), offset);
+    }
+
+    // Obtener estadísticas considerando privacidad
+    async getStats(targetUsername, requestingUserId) {
+        const targetUser = await UserModel.findByUsername(targetUsername);
+        if (!targetUser) throw new Error('Usuario no encontrado');
+
+        const isOwn = requestingUserId === targetUser.id;
+        if (!isOwn && (!targetUser.is_profile_public || !targetUser.are_stats_public)) {
+            return { is_private: true };
+        }
+
+        const stats = await ReadingModel.getStatsByUserId(targetUser.id, !isOwn);
+        stats.is_private = false;
+        return stats;
+    }
+
+    // Actualizar configuración de privacidad
+    async updatePrivacySettings(userId, { is_profile_public, are_stats_public }) {
+        await UserModel.updatePrivacy(userId, { is_profile_public, are_stats_public });
+        return { success: true };
     }
 }
 

@@ -28,5 +28,17 @@ class UserService {
     final data = await _api.post('/users/goal', body: {'target_books': targetBooks});
     return data as Map<String, dynamic>;
   }
+
+  Future<Map<String, dynamic>> updatePrivacySettings({
+    bool? isProfilePublic,
+    bool? areStatsPublic,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (isProfilePublic != null) payload['is_profile_public'] = isProfilePublic;
+    if (areStatsPublic != null) payload['are_stats_public'] = areStatsPublic;
+
+    final data = await _api.put('/users/privacy', body: payload);
+    return data as Map<String, dynamic>;
+  }
 }
 

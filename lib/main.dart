@@ -6,15 +6,20 @@ import 'screens/tabs_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
 import 'services/theme_service.dart';
+import 'services/timer_background_service.dart';
 import 'config.dart';
 
 void main() async {
   // 1. Aseguramos que Flutter esté listo
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Inicializar servicio de temporizador en segundo plano
+  await TimerBackgroundService.initializeService();
+
   // 2. Cargamos el formato de fechas en español
   await initializeDateFormatting('es', null);
   await ThemeService().loadTheme();
+
 
   // 3. Intentar refresh rate alto (solo Android, falla silenciosamente en otros)
   try {

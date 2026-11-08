@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:test_lectorapp/services/reading_service.dart';
 import '../widgets/user_card.dart';
 import 'package:test_lectorapp/screens/book_detail_screen.dart';
+import 'package:test_lectorapp/screens/public_profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -39,8 +40,8 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initFeed() async {
     final cachedFeed = await ReadingService().getCachedFeed();
     if (cachedFeed != null && cachedFeed.isNotEmpty) {
-      // Precachear las portadas visibles antes de mostrar el feed
-      await _precacheVisibleImages(cachedFeed);
+      // Pre-decodificar portadas ANTES de revelar el feed
+      await _precacheVisibleCovers(cachedFeed);
       if (mounted) {
         setState(() {
           feed = cachedFeed;
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
       _checkForNewPosts();
+      _prefetchUpcomingCovers(cachedFeed);
     } else {
       loadFeed();
     }
@@ -93,33 +95,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  /// Pre-decodifica en RAM las portadas de los primeros items visibles.
-  /// Timeout de 3 segundos para no bloquear si la red es lenta.
-  Future<void> _precacheVisibleImages(List<dynamic> items) async {
-    if (!mounted) return;
-    final visibleItems = items.take(5); // solo las primeras 5 portadas
-    final futures = <Future>[];
-
-    for (final item in visibleItems) {
-      final coverUrl = (item['cover_url'] ?? item['cover_image'] ?? '') as String;
-      if (coverUrl.isNotEmpty) {
-        futures.add(
-          precacheImage(
-            CachedNetworkImageProvider(coverUrl),
-            context,
-          ).catchError((_) {}), // ignorar errores individuales
-        );
-      }
-    }
-
-    if (futures.isNotEmpty) {
-      await Future.wait(futures).timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => [], // si pasan 3 seg, continuar sin esperar
-      );
-    }
-  }
-
   Future<void> loadFeed() async {
     if (mounted) {
       setState(() {
@@ -133,8 +108,8 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final data =
           await ReadingService().getGlobalFeed(page: _page, limit: _limit);
-      // Precachear portadas antes de mostrar el feed
-      await _precacheVisibleImages(data);
+      // Pre-decodificar portadas ANTES de revelar el feed
+      await _precacheVisibleCovers(data);
       if (mounted) {
         setState(() {
           feed = data;
@@ -145,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen>
           }
         });
         ReadingService().saveCachedFeed(data);
+        _prefetchUpcomingCovers(data);
       }
     } catch (e) {
       if (mounted) {
@@ -222,6 +198,58 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  /// Pre-decodifica las portadas y avatares de los primeros items visibles.
+  /// Usa CachedNetworkImageProvider para aprovechar la caché de disco existente.
+  /// Timeout de 3s para no bloquear si no hay red ni caché de disco.
+  Future<void> _precacheVisibleCovers(List<dynamic> feedData) async {
+    if (!mounted) return;
+    const visibleCount = 5;
+    final urls = <String>[];
+
+    for (int i = 0; i < feedData.length && i < visibleCount; i++) {
+      final item = feedData[i];
+      // Portada del libro
+      final coverUrl = item['cover_url']?.toString();
+      if (coverUrl != null && coverUrl.isNotEmpty) {
+        urls.add(coverUrl);
+      }
+      // Avatar del usuario
+      String? avatarUrl = item['avatar_url']?.toString();
+      if (avatarUrl != null && avatarUrl.isNotEmpty) {
+        if (avatarUrl.contains('/svg')) {
+          avatarUrl = avatarUrl.replaceAll('/svg', '/png');
+        }
+        urls.add(avatarUrl);
+      }
+    }
+
+    if (urls.isEmpty) return;
+
+    try {
+      await Future.wait(
+        urls.map((url) => precacheImage(
+              CachedNetworkImageProvider(url),
+              context,
+            ).catchError((_) {})),
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Timeout expirado: mostrar feed de todos modos
+    }
+  }
+
+  /// Pre-decodifica las portadas de los items 5-10 en background.
+  void _prefetchUpcomingCovers(List<dynamic> feedData) {
+    if (!mounted || feedData.length <= 5) return;
+    final upcoming = feedData.skip(5).take(5);
+    for (final item in upcoming) {
+      final coverUrl = item['cover_url']?.toString();
+      if (coverUrl != null && coverUrl.isNotEmpty) {
+        precacheImage(CachedNetworkImageProvider(coverUrl), context)
+            .catchError((_) {});
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Requerido por AutomaticKeepAliveClientMixin
@@ -242,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen>
             onRefresh: loadFeed,
             color: Theme.of(context).primaryColor,
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? _buildSkeleton()
                 : _errorMessage != null
                     ? Center(child: Text(_errorMessage!))
                     : ListView.separated(
@@ -265,6 +293,17 @@ class _HomeScreenState extends State<HomeScreen>
                             item: feed[index],
                             mode: 'feed',
                             onLikeClick: () => _handleToggleLike(index),
+                            onUserClick: () {
+                              final username = feed[index]['username'];
+                              if (username != null && username.toString().isNotEmpty) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PublicProfileScreen(username: username),
+                                  ),
+                                );
+                              }
+                            },
                             onBookClick: () {
                               Navigator.push(
                                 context,
@@ -314,6 +353,146 @@ class _HomeScreenState extends State<HomeScreen>
                 : '$_newPostsCount nuevas publicaciones',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    final primaryColor = Theme.of(context).primaryColor;
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 3,
+      itemBuilder: (context, index) => Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withValues(alpha: 0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header skeleton
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: primaryColor.withValues(alpha: 0.1),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 120,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 60,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Review text skeleton
+            Container(
+              width: double.infinity,
+              height: 12,
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: 200,
+              height: 12,
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Book embed skeleton
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 60,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 140,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 90,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.07),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: List.generate(
+                            5,
+                            (i) => Padding(
+                              padding: const EdgeInsets.only(right: 2),
+                              child: Icon(
+                                Icons.star_rounded,
+                                size: 18,
+                                color: primaryColor.withValues(alpha: 0.12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

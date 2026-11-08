@@ -260,6 +260,66 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  void _onOpenPrivacyDialog() {
+    if (_profile == null) return;
+    bool isProfilePublic = _profile!.isProfilePublic;
+    bool areStatsPublic = _profile!.areStatsPublic;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Ajustes de Privacidad'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    title: const Text('Perfil Público'),
+                    subtitle: const Text('Permite que otros usuarios vean tu perfil y biblioteca'),
+                    value: isProfilePublic,
+                    activeTrackColor: Theme.of(context).primaryColor,
+                    onChanged: (val) {
+                      setDialogState(() => isProfilePublic = val);
+                    },
+                  ),
+                  const Divider(),
+                  SwitchListTile(
+                    title: const Text('Estadísticas Públicas'),
+                    subtitle: const Text('Permite que otros usuarios vean tus estadísticas de lectura'),
+                    value: areStatsPublic,
+                    activeTrackColor: Theme.of(context).primaryColor,
+                    onChanged: (val) {
+                      setDialogState(() => areStatsPublic = val);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await UserService().updatePrivacySettings(
+                      isProfilePublic: isProfilePublic,
+                      areStatsPublic: areStatsPublic,
+                    );
+                    _loadMyProfile();
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _onOpenThemeSheet() {
     showModalBottomSheet(
       context: context,
@@ -316,10 +376,17 @@ class _ProfileScreenState extends State<ProfileScreen>
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings_outlined),
             onSelected: (value) {
+              if (value == 'privacy') _onOpenPrivacyDialog();
               if (value == 'theme') _onOpenThemeSheet();
               if (value == 'logout') _onLogout();
             },
             itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                  value: 'privacy',
+                  child: ListTile(
+                      leading: Icon(Icons.lock_outline_rounded),
+                      title: Text('Privacidad'),
+                      contentPadding: EdgeInsets.zero)),
               const PopupMenuItem(
                   value: 'theme',
                   child: ListTile(
@@ -904,10 +971,23 @@ class _ProfileScreenState extends State<ProfileScreen>
               const SizedBox(width: 12),
               Expanded(
                 child: _buildMetricCard(
+                  icon: Icons.favorite_rounded,
+                  iconColor: const Color(0xFFE57373),
+                  title: 'Likes Recibidos',
+                  value: '${_stats?['total_likes'] ?? 0}',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
                   icon: Icons.star_rounded,
                   iconColor: const Color(0xFFFFD54F),
                   title: 'Promedio Stars',
-                  value: '$avgRating ⭐',
+                  value: '$avgRating',
                 ),
               ),
             ],

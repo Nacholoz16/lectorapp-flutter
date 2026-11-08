@@ -6,6 +6,7 @@ class UserProfile {
   final String? bio;
   final String? avatarUrl;
   final bool isProfilePublic;
+  final bool areStatsPublic;
   final bool isOwnProfile;
   final bool isPrivateLock;
   final List<ReadingLog> library;
@@ -15,6 +16,7 @@ class UserProfile {
     this.bio,
     this.avatarUrl,
     this.isProfilePublic = true,
+    this.areStatsPublic = true,
     this.isOwnProfile = false,
     this.isPrivateLock = false,
     this.library = const [],
@@ -27,6 +29,7 @@ class UserProfile {
       bio: json['bio'],
       avatarUrl: json['avatar_url'],
       isProfilePublic: json['is_profile_public'] == true,
+      areStatsPublic: json['are_stats_public'] ?? true,
       isOwnProfile: json['is_own_profile'] == true,
       isPrivateLock: json['is_private_lock'] == true,
       library: rawLibrary

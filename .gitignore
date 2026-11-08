@@ -64,3 +64,5 @@ android/.gradle/
 /ios/.symlinks/
 /ios/ephemeral/
 .ios/
+# Herramientas Node sueltas (ej. jimp para generar assets)
+node_modules/

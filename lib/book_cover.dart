@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'widgets/book_loader.dart';
 
 class BookCover extends StatelessWidget {
   final String? src;
@@ -33,10 +34,13 @@ class BookCover extends StatelessWidget {
         child: src != null && src!.isNotEmpty
             ? CachedNetworkImage(
                 imageUrl: src!,
-                fadeInDuration: Duration.zero,
-                fadeOutDuration: Duration.zero,
+                fadeInDuration: const Duration(milliseconds: 300),
+                fadeOutDuration: const Duration(milliseconds: 300),
                 fit: BoxFit.cover,
-                placeholder: (context, url) => _buildPlaceholder(context),
+                placeholder: (context, url) => Container(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  child: Center(child: BookLoader(color: primaryColor)),
+                ),
                 errorWidget: (context, url, error) =>
                     _buildPlaceholder(context),
               )

@@ -9,6 +9,7 @@ class UserCard extends StatelessWidget {
   final String mode; // 'feed' o 'review'
   final VoidCallback? onBookClick;
   final VoidCallback? onLikeClick;
+  final VoidCallback? onUserClick;
 
   const UserCard({
     super.key,
@@ -16,6 +17,7 @@ class UserCard extends StatelessWidget {
     this.mode = 'feed',
     this.onBookClick,
     this.onLikeClick,
+    this.onUserClick,
   });
 
   // Colores Pastel para los estados
@@ -80,10 +82,13 @@ class UserCard extends StatelessWidget {
               padding: const EdgeInsets.all(20.0),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundImage: CachedNetworkImageProvider(avatarUrl),
-                    backgroundColor: primaryColor.withValues(alpha: 0.1),
+                  GestureDetector(
+                    onTap: onUserClick,
+                    child: CircleAvatar(
+                      radius: 24,
+                      backgroundImage: CachedNetworkImageProvider(avatarUrl),
+                      backgroundColor: primaryColor.withValues(alpha: 0.1),
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -92,10 +97,13 @@ class UserCard extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              item['username'] ?? 'Usuario',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
+                            GestureDetector(
+                              onTap: onUserClick,
+                              child: Text(
+                                item['username'] ?? 'Usuario',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
                             ),
                             const SizedBox(width: 8),
                             Text(

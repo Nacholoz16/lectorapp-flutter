@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/reading_service.dart';
+import '../services/timer_background_service.dart';
 
 class ReadingTimerModal extends StatefulWidget {
   final List<dynamic> readingLogs; // Lista de libros en estado 'leyendo'
@@ -13,15 +16,17 @@ class ReadingTimerModal extends StatefulWidget {
 }
 
 class _ReadingTimerModalState extends State<ReadingTimerModal> {
-  Timer? _timer;
+  StreamSubscription<Map<String, dynamic>?>? _serviceSubscription;
   int _seconds = 0;
   bool _isRunning = false;
   bool _isFinished = false;
   bool _isSaving = false;
 
   Map<String, dynamic>? _selectedLog;
-  final TextEditingController _pagesReadController = TextEditingController(text: '0');
-  final TextEditingController _currentPageController = TextEditingController();
+  final TextEditingController _pagesReadController =
+      TextEditingController(text: '0');
+  final TextEditingController _currentPageController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -30,39 +35,72 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
       _selectedLog = widget.readingLogs.first;
       _updateCurrentPageText();
     }
+
+    _requestNotificationPermission();
+
+    _serviceSubscription = FlutterBackgroundService()
+        .on('update')
+        .listen((event) {
+      if (event != null && mounted) {
+        setState(() {
+          _seconds = event['seconds'] ?? _seconds;
+          _isRunning = event['isRunning'] ?? _isRunning;
+          _isFinished = event['isFinished'] ?? _isFinished;
+          if (event['selectedLog'] != null) {
+            _selectedLog = Map<String, dynamic>.from(event['selectedLog']);
+            _updateCurrentPageText();
+          }
+        });
+      }
+    });
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
   }
 
   void _updateCurrentPageText() {
     if (_selectedLog != null) {
-      final cp = _selectedLog!['current_page'] ?? _selectedLog!['currentPage'] ?? 0;
+      final cp =
+          _selectedLog!['current_page'] ?? _selectedLog!['currentPage'] ?? 0;
       _currentPageController.text = cp.toString();
     }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _serviceSubscription?.cancel();
     _pagesReadController.dispose();
     _currentPageController.dispose();
     super.dispose();
   }
 
-  void _startTimer() {
-    setState(() => _isRunning = true);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() => _seconds++);
-      }
+  void _startTimer() async {
+    final title = _selectedLog?['title'] ?? 'Sesión de Lectura';
+    await TimerBackgroundService.start(
+      bookTitle: title,
+      selectedLog: _selectedLog,
+      initialSeconds: _seconds,
+    );
+    setState(() {
+      _isRunning = true;
     });
   }
 
   void _pauseTimer() {
-    _timer?.cancel();
-    setState(() => _isRunning = false);
+    TimerBackgroundService.pause();
+    setState(() {
+      _isRunning = false;
+    });
   }
 
   void _stopTimer() {
-    _timer?.cancel();
+    TimerBackgroundService.stop();
     setState(() {
       _isRunning = false;
       _isFinished = true;
@@ -97,13 +135,19 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
         pagesRead: pagesRead,
         currentPage: currentPage,
       );
+
+      TimerBackgroundService.stopService();
+
       if (mounted) {
         Navigator.pop(context, {'saved': true, 'minutes': durationMinutes});
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar la sesión: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error al guardar la sesión: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -144,7 +188,11 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                 SizedBox(width: 8),
                 Text(
                   'Sesión de Lectura',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Lora'),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Lora',
+                  ),
                 ),
               ],
             ),
@@ -155,7 +203,11 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                 padding: const EdgeInsets.symmetric(vertical: 24.0),
                 child: Column(
                   children: [
-                    Icon(Icons.menu_book_rounded, size: 48, color: Colors.grey.shade400),
+                    Icon(
+                      Icons.menu_book_rounded,
+                      size: 48,
+                      color: Colors.grey.shade400,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'No tienes libros en estado "LEYENDO" actualmente.\nAgrega uno desde el buscador para iniciar el cronómetro.',
@@ -172,8 +224,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                   initialValue: _selectedLog,
                   decoration: InputDecoration(
                     labelText: 'Selecciona el libro que vas a leer',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                   items: widget.readingLogs.map((log) {
                     final title = log['title'] ?? 'Sin título';
@@ -213,10 +270,17 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                       ElevatedButton.icon(
                         onPressed: _startTimer,
                         icon: const Icon(Icons.play_arrow_rounded, size: 28),
-                        label: Text(_seconds == 0 ? 'Iniciar Lectura' : 'Reanudar'),
+                        label: Text(
+                          _seconds == 0 ? 'Iniciar Lectura' : 'Reanudar',
+                        ),
                         style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                       )
                     else ...[
@@ -225,8 +289,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                         icon: const Icon(Icons.pause_rounded, size: 24),
                         label: const Text('Pausar'),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -237,8 +306,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade400,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                       ),
                     ],
@@ -256,7 +330,10 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                     children: [
                       Text(
                         '¡Excelente lectura! Lograste ${math.max(1, (_seconds / 60).round())} minutos.',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -267,8 +344,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 labelText: 'Páginas leídas hoy',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                               ),
                             ),
                           ),
@@ -279,8 +361,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 labelText: 'Página actual',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                               ),
                             ),
                           ),
@@ -296,11 +383,23 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                     onPressed: _isSaving ? null : _saveSession,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
                     child: _isSaving
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Guardar Sesión', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Guardar Sesión',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ],

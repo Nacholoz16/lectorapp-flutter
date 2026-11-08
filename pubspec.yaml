@@ -19,6 +19,8 @@ dependencies:
   flutter_displaymode: ^0.6.0
   cached_network_image: ^3.3.1
   flutter_secure_storage: ^10.3.1
+  flutter_background_service: ^5.0.1
+  flutter_local_notifications: ^17.1.2
   
 dev_dependencies:
   flutter_test:

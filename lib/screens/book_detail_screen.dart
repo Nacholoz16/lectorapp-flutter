@@ -5,6 +5,7 @@ import 'package:test_lectorapp/book_cover.dart';
 import '../widgets/user_card.dart';
 import '../services/book_service.dart';
 import '../widgets/log_book_modal.dart';
+import 'public_profile_screen.dart';
 
 class BookDetailScreen extends StatefulWidget {
   final Map<String, dynamic> book;
@@ -253,6 +254,17 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         return UserCard(
                           item: _reviews[index],
                           mode: 'review',
+                          onUserClick: () {
+                            final username = _reviews[index]['username'];
+                            if (username != null && username.toString().isNotEmpty) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => PublicProfileScreen(username: username),
+                                ),
+                              );
+                            }
+                          },
                         );
                       },
                       childCount: _reviews.length,
