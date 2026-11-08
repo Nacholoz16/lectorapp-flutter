@@ -313,14 +313,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           if (result != null && result['saved'] == true) {
             messenger.showSnackBar(
               SnackBar(
-                  content: const Text('¡Lectura registrada exitosamente!'),
+                  content: const Text('Guardado en tu biblioteca'),
                   backgroundColor: successColor),
             );
             unawaited(_loadReviews());
           }
         },
-        icon: const Icon(Icons.edit_rounded),
-        label: const Text('Escribir',
+        icon: const Icon(Icons.library_add_rounded),
+        label: const Text('Añadir a mi biblioteca',
             style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
         elevation: 0,
         highlightElevation: 0,

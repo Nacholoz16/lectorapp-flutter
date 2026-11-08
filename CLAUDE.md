@@ -74,6 +74,7 @@ test_lectorapp/
 │   │   └── lector_colors.dart        # ThemeExtension con tokens de color (accent/ink/textSecondary/estados) → context.lector
 │   ├── models/
 │   │   ├── book.dart                 # Modelo Book (normaliza external_id/google_id y author/authors) — SIN USO actualmente
+│   │   ├── reading_log_draft.dart    # Estado del formulario de lectura + borrador local (SharedPreferences)
 │   │   ├── reading_log.dart          # Modelo ReadingLog (estado, progreso, likes, reseña, safeAvatarUrl)
 │   │   └── user_profile.dart         # Modelo UserProfile (datos de usuario, flags de privacidad y biblioteca)
 │   ├── services/
@@ -84,6 +85,8 @@ test_lectorapp/
 │   │   ├── user_service.dart         # Singleton: perfil, biblioteca paginada, stats, meta anual, privacidad
 │   │   ├── theme_service.dart        # Singleton de temas con ValueNotifier<ThemeData> y 4 paletas pastel
 │   │   └── timer_background_service.dart # Isolate y controlador del cronómetro en segundo plano
+│   ├── ui/
+│   │   └── feedback.dart             # showSuccess / showError / friendlyError: mensajes con voz y estilo comunes
 │   ├── utils/
 │   │   └── json_utils.dart           # asBool / asInt: lectura tolerante de JSON (bool o 1/0, int o String)
 │   ├── screens/
@@ -97,8 +100,10 @@ test_lectorapp/
 │   │   └── book_detail_screen.dart   # Vista detallada de un libro con fondo blur inmersivo y reseñas
 │   └── widgets/
 │       ├── user_card.dart            # Tarjeta versátil para el feed ('feed') o lista de reseñas ('review')
-│       ├── log_book_modal.dart       # BottomSheet para registrar una nueva lectura
-│       ├── edit_book_modal.dart      # BottomSheet para editar o eliminar un registro existente
+│       ├── reading_log_sheet.dart    # Formulario único añadir/editar lectura: borrador automático, aviso al descartar, validación
+│       ├── star_rating_input.dart    # Estrellas 0–5 accesibles (un control ajustable para TalkBack)
+│       ├── log_book_modal.dart       # Envoltorio de ReadingLogSheet (añadir) → {'saved': true}
+│       ├── edit_book_modal.dart      # Envoltorio de ReadingLogSheet (editar/eliminar) → {'action': ...}
 │       ├── reading_timer_modal.dart  # BottomSheet del cronómetro conectado a TimerBackgroundService
 │       ├── book_stats_modal.dart     # BottomSheet con métricas específicas de un libro
 │       └── book_loader.dart          # Animación 3D personalizada de páginas pasando (Custom Loader)
@@ -148,6 +153,7 @@ test_lectorapp/
 - **Carga Instantánea Offline-First:** muestra primero el feed guardado en `SharedPreferences` (`cached_global_feed`) tras pre-cachear las primeras 5 portadas/avatares (`_precacheVisibleCovers`, timeout de 3 s).
 - **Paginación por cursor:** las páginas siguientes se piden con `before_id = id del último elemento cargado` (`GET /readings/feed?limit=10&before_id=<id>`). No usar `page`/OFFSET en el feed: duplicaba o saltaba publicaciones cuando entraban nuevas.
 - **Banner "X nuevas publicaciones":** `GET /readings/feed/new-count?after_id=<id del primero>` devuelve solo `{ count }`.
+- **Refresco entre pestañas:** `ReadingService().libraryChanges` (ValueNotifier) se incrementa al crear/editar/borrar lecturas o guardar sesiones; `ProfileScreen` lo escucha y recarga (antes, un libro añadido desde Buscar no aparecía en Perfil hasta reiniciar).
 - **Optimistic UI en Likes:** `_handleToggleLike` invierte el estado al instante y lo confirma o revierte con la respuesta. La publicación se actualiza **por `id`**, no por índice (el feed puede recargarse durante la petición).
 
 ### 4.5 Cronómetro en Segundo Plano (`TimerBackgroundService`)

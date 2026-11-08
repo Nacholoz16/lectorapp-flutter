@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/reading_service.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
 import '../models/reading_log.dart';
@@ -43,11 +44,16 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    ReadingService().libraryChanges.addListener(_onLibraryChanged);
     _loadMyProfile();
   }
 
+  /// La biblioteca cambió (aquí o desde otra pestaña): recargar perfil y estadísticas.
+  void _onLibraryChanged() => unawaited(_loadMyProfile());
+
   @override
   void dispose() {
+    ReadingService().libraryChanges.removeListener(_onLibraryChanged);
     _scrollController.dispose();
     super.dispose();
   }
@@ -80,16 +86,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             })
         .toList();
 
-    final result = await showModalBottomSheet(
+    await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ReadingTimerModal(readingLogs: readingLogs),
     );
-
-    if (result != null && result['saved'] == true) {
-      unawaited(_loadMyProfile());
-    }
   }
 
   void _openEditGoalDialog() {
@@ -642,16 +644,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return InkWell(
       onTap: () async {
-        final result = await showModalBottomSheet(
+        await showModalBottomSheet<Object?>(
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (context) => EditBookModal(readingLog: logMap),
         );
-        if (result != null &&
-            (result['action'] == 'updated' || result['action'] == 'deleted')) {
-          unawaited(_loadMyProfile());
-        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -747,16 +745,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: () async {
-                          final result = await showModalBottomSheet(
+                          await showModalBottomSheet<Object?>(
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
                             builder: (context) => EditBookModal(readingLog: logMap),
                           );
-                          if (result != null &&
-                              (result['action'] == 'updated' || result['action'] == 'deleted')) {
-                            unawaited(_loadMyProfile());
-                          }
                         },
                       ),
                       const SizedBox(width: 8),

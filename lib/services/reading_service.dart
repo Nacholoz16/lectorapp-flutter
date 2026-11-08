@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 
@@ -7,6 +8,12 @@ class ReadingService {
   factory ReadingService() => _instance;
   ReadingService._internal();
   final _api = ApiClient();
+
+  /// Se incrementa cada vez que la biblioteca del usuario cambia (añadir, editar, borrar o
+  /// guardar una sesión). Las pantallas que muestran la biblioteca lo escuchan para
+  /// refrescarse aunque el cambio se haya hecho desde otra pestaña (p. ej. Buscar → Perfil).
+  final ValueNotifier<int> libraryChanges = ValueNotifier<int>(0);
+  void _notifyLibraryChanged() => libraryChanges.value++;
 
   /// Feed global paginado por cursor.
   /// [beforeId]: id del último elemento ya mostrado (null = primera página).
@@ -45,6 +52,7 @@ class ReadingService {
 
   Future<void> createLog(Map<String, dynamic> payload) async {
     await _api.post('/readings', body: payload);
+    _notifyLibraryChanged();
   }
 
   Future<List<dynamic>> getMyLibrary({int page = 1, int limit = 10}) async {
@@ -55,10 +63,12 @@ class ReadingService {
 
   Future<void> updateLog(String id, Map<String, dynamic> payload) async {
     await _api.put('/readings/$id', body: payload);
+    _notifyLibraryChanged();
   }
 
   Future<void> deleteLog(String id) async {
     await _api.delete('/readings/$id');
+    _notifyLibraryChanged();
   }
 
   Future<Map<String, dynamic>> toggleLike(int readingLogId) async {
@@ -75,6 +85,7 @@ class ReadingService {
       'pages_read': pagesRead,
       if (currentPage != null) 'current_page': currentPage,
     });
+    _notifyLibraryChanged();
   }
 
   Future<Map<String, dynamic>> getBookStats(int readingLogId) async {

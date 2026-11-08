@@ -87,7 +87,7 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.add_circle_outline),
-                title: const Text('Registrar Lectura'),
+                title: const Text('Añadir a mi biblioteca'),
                 onTap: () async {
                   Navigator.pop(sheetContext); // Cerramos el Action Sheet
 
@@ -102,7 +102,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   if (result != null && result['saved'] == true) {
                     scaffoldMessenger.showSnackBar(
                       SnackBar(
-                          content: const Text('¡Libro registrado exitosamente!'),
+                          content: const Text('Guardado en tu biblioteca'),
                           backgroundColor: successColor),
                     );
                   }
