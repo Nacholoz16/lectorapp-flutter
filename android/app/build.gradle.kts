@@ -34,9 +34,20 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // PENDIENTE (antes de publicar en Google Play): firmar con un keystore propio.
+            // Hoy se firma con la clave de debug para que `flutter run --release` funcione,
+            // pero Google Play rechaza APKs/AABs firmados así.
+            // Guía: https://docs.flutter.dev/deployment/android#sign-the-app
             signingConfig = signingConfigs.getByName("debug")
+
+            // R8: elimina código y recursos no usados y ofusca nombres de clases Java/Kotlin.
+            // (El código Dart se ofusca aparte con: flutter build ... --obfuscate --split-debug-info=build/symbols)
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
