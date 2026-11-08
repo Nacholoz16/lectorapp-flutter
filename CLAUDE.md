@@ -349,8 +349,4 @@ y los secretos están en `~/[LECTORAPP]/.env` (fuera de git). El front web viejo
 
 ## 9. Pendientes Conocidos
 
-- **Firma de release:** `android/app/build.gradle.kts` firma el release con las claves de **debug**. Antes de publicar en Google Play hay que crear un keystore propio y configurar `signingConfigs.release` (guía: https://docs.flutter.dev/deployment/android#sign-the-app). El keystore y sus contraseñas no deben subirse al repositorio.
-- **Modelos tipados en el feed:** `HomeScreen`/`UserCard` usan `Map` crudos; migrar a `ReadingLog` (con `copyWith`) daría más seguridad de tipos.
-- **Búsqueda local:** `BookModel.searchLocal` usa `LIKE '%q%'` (escaneo completo). Con decenas de miles de libros, migrar a índice `FULLTEXT(title, author)`.
-- **Refresh tokens:** el JWT dura 7 días sin renovación; al expirar el usuario debe volver a iniciar sesión.
-- **Dependencias desactualizadas:** varios paquetes tienen versiones mayores nuevas (`flutter pub outdated`); actualizarlas con pruebas.
+La lista viva está en [`PENDIENTES.md`](PENDIENTES.md): tareas de antes de publicar (rotar clave de ZeptoMail, firma de release, contraseña root de MySQL, bundle ID de iOS), de código (refresh tokens, modelos tipados en el feed, FULLTEXT en la búsqueda, dependencias) y de diseño. Actualizarla al cerrar o descubrir tareas.
