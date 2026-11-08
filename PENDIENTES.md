@@ -22,9 +22,6 @@ Tareas conocidas que **no bloquean el desarrollo** y se retoman más adelante.
 
 ## Código (sprint)
 
-- [ ] **Refresh tokens.** Hoy el JWT dura 7 días sin renovación: al vencer, el usuario debe volver a
-  iniciar sesión aunque use la app a diario. Ver plan propuesto en la conversación del 2026-11-08
-  (token de acceso corto + refresh token rotativo guardado como hash en BD).
 - [ ] **Modelos tipados en el feed.** `HomeScreen` / `UserCard` usan `Map` crudos; migrar a `ReadingLog`
   (con `copyWith`) daría más seguridad de tipos.
 - [ ] **Búsqueda local en la API.** `BookModel.searchLocal` usa `LIKE '%q%'` (escaneo completo).

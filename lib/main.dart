@@ -28,18 +28,20 @@ void main() async {
     ApiClient().loadToken(),
   ]);
 
-  // 3. AUTO-LOGIN: verificamos localmente que el token no haya expirado
+  // 3. AUTO-LOGIN: hay sesión si el token de acceso sigue vigente o si hay refresh token
+  //    (el acceso dura 30 min; ApiClient lo renueva solo en la primera petición, así el
+  //    arranque no espera a la red).
   final token = await ApiClient().getToken();
-  final bool hasValidToken = AuthService.isJwtValid(token);
+  final refreshToken = await ApiClient().getRefreshToken();
+  final bool hasSession = AuthService.isJwtValid(token) || refreshToken != null;
 
-  // Token expirado: limpiar solo lo local. No se llama a /auth/logout porque un token
-  // expirado ya no sirve, y esperar a la red aquí retrasaría el arranque (o lo colgaría sin red).
-  if (token != null && !hasValidToken) {
+  // Sesión antigua (solo token de 7 días, sin refresh) ya vencida: limpiar lo local.
+  if (token != null && !hasSession) {
     await ApiClient().clearSession();
   }
 
   final Widget initialScreen =
-      hasValidToken ? const TabsScreen() : const LoginScreen();
+      hasSession ? const TabsScreen() : const LoginScreen();
 
   // 4. Arrancamos la app
   runApp(LectorApp(initialScreen: initialScreen));

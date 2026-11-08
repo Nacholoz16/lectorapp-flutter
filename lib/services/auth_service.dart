@@ -63,7 +63,10 @@ class AuthService {
     if (data is! Map || data['token'] is! String) {
       throw ApiException('Respuesta inválida del servidor');
     }
-    await _api.setToken(data['token']);
+    await _api.setSession(
+      token: data['token'] as String,
+      refreshToken: data['refresh_token'] as String?,
+    );
 
     // Solo lo necesario para la UI: no persistimos el email en almacenamiento sin cifrar.
     final user = data['user'] as Map? ?? {};
@@ -116,13 +119,17 @@ class AuthService {
   /// Verifica si el token guardado existe y NO ha expirado.
   Future<bool> isTokenValid() async => isJwtValid(await getToken());
 
-  /// Cierra sesión: revoca el token en el backend (para que no siga siendo válido
-  /// los días que le quedan) y luego borra los datos locales.
-  /// Si no hay red, igual cierra la sesión local.
+  /// Cierra sesión: revoca en la API el token de acceso y la sesión larga (refresh token),
+  /// y luego borra los datos locales. Si no hay red, igual cierra la sesión local.
   Future<void> logout() async {
     try {
-      if (await getToken() != null) {
-        await _api.post('/auth/logout', redirectOn401: false);
+      final refreshToken = await _api.getRefreshToken();
+      if (await getToken() != null || refreshToken != null) {
+        await _api.post(
+          '/auth/logout',
+          body: {if (refreshToken != null) 'refresh_token': refreshToken},
+          redirectOn401: false,
+        );
       }
     } catch (_) {
       // Sin red o token ya inválido: no debe impedir cerrar sesión localmente.

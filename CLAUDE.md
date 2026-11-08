@@ -33,7 +33,7 @@ Este archivo contiene el contexto técnico, la arquitectura, las librerías y la
 | Librería                       | Versión    | Uso en el proyecto                                                                                                                     |
 | :------------------------------ | :---------- | :------------------------------------------------------------------------------------------------------------------------------------- |
 | `http`                        | `^1.1.0`  | Peticiones REST hacia la API mediante el wrapper centralizado `ApiClient` (un único `http.Client` reutilizado, keep-alive).          |
-| `flutter_secure_storage`      | `^10.3.1` | Almacenamiento cifrado del JWT (`auth-token`).                                                                                       |
+| `flutter_secure_storage`      | `^10.3.1` | Almacenamiento cifrado de la sesión: JWT de acceso (`auth-token`) y refresh token (`refresh-token`).                                                                                       |
 | `shared_preferences`          | `^2.2.2`  | Persistencia ligera: datos de usuario (`user-data`: solo `id`, `username`, `avatar`), tema activo (`app_theme`), vista del feed (`feed_layout`), borradores de lecturas (`reading_draft_*`) y caché offline del feed (`cached_global_feed`). |
 | `cached_network_image`        | `^3.3.1`  | Caché en disco/memoria y pre-decodificación (`precacheImage`) de portadas de libros y avatares.                                    |
 | `flutter_background_service`  | `^5.0.1`  | Ejecución del cronómetro de lectura en un *isolate* separado en segundo plano (`TimerBackgroundService`).                        |
@@ -78,7 +78,7 @@ test_lectorapp/
 │   │   ├── reading_log.dart          # Modelo ReadingLog (estado, progreso, likes, reseña, safeAvatarUrl)
 │   │   └── user_profile.dart         # Modelo UserProfile (datos de usuario, flags de privacidad y biblioteca)
 │   ├── services/
-│   │   ├── api_client.dart           # Singleton HTTP: JWT en memoria, timeout 15s, 401 → Login, errores → ApiException
+│   │   ├── api_client.dart           # Singleton HTTP: sesión en memoria, renovación automática (refresh), timeout 15s, errores → ApiException
 │   │   ├── auth_service.dart         # Login/registro (vía ApiClient), logout con revocación, validación local de JWT
 │   │   ├── book_service.dart         # Búsqueda de libros y feed de reseñas por libro (NO es singleton)
 │   │   ├── reading_service.dart      # Singleton: feed por cursor, new-count, caché, CRUD logs, likes, sesiones, stats
@@ -134,14 +134,15 @@ test_lectorapp/
   - Emulador Android: `http://10.0.2.2:3000/api`
   - Teléfono físico: `http://localhost:3000/api` + `adb reverse tcp:3000 tcp:3000`
 - **TODA llamada HTTP pasa por `ApiClient`**, incluidos login y registro. `ApiClient` tiene un único método interno `_send` y expone `get/post/put/delete`.
-- **`redirectOn401: false`** en `post()` para login, registro y logout: ahí un 401 significa "credenciales inválidas" o "token ya revocado", no "sesión expirada".
+- **`redirectOn401: false`** en `post()` para login, registro, logout y recuperación: ahí un 401 significa "credenciales inválidas", no "sesión expirada" (no se intenta renovar ni se va a Login).
+- **Sesión con refresh token:** el JWT de acceso dura **30 min**; el refresh token (opaco, **60 días**, rotativo) lo renueva. `ApiClient` renueva solo: antes de pedir si el acceso ya venció, y ante un 401 (reintenta una vez). Varias peticiones simultáneas comparten **una** renovación (`_refreshing`). Si la API rechaza el refresh (401/400) → `clearSession()` y Login; si falla la red o el servidor (5xx/429) la sesión se conserva.
 - **Manejo de Errores:** timeout de 15 s. Toda falla se convierte en `ApiException(message, statusCode)`:
   - HTTP 4xx/5xx → mensaje del campo `error` (o `message`) del JSON del backend.
   - Cuerpo no-JSON (ej. HTML de Nginx en un 502) → mensaje genérico, sin `FormatException`.
   - `TimeoutException`, `SocketException`, `ClientException` → mensajes amigables con `statusCode: 0`.
-- **Caché de Token en Memoria:** `ApiClient().loadToken()` lee el JWT de `FlutterSecureStorage` una sola vez al arrancar.
-- **Validación proactiva de JWT:** `AuthService.isJwtValid(token)` decodifica el payload localmente para comprobar `exp` (la firma la valida siempre el backend). Si el token expiró al arrancar, `main.dart` solo hace `clearSession()` (sin llamar a la red).
-- **Logout:** `AuthService.logout()` llama a `POST /auth/logout` (revoca el token en el servidor; si no hay red, no bloquea) y luego `clearSession()`.
+- **Caché de sesión en memoria:** `ApiClient().loadToken()` lee ambos tokens de `FlutterSecureStorage` una sola vez al arrancar.
+- **Arranque:** hay sesión si el JWT sigue vigente (`AuthService.isJwtValid`, solo lee `exp`) **o** hay refresh token; no se espera a la red (la primera petición renueva). Una sesión antigua sin refresh y vencida se limpia localmente.
+- **Logout:** `AuthService.logout()` llama a `POST /auth/logout` con el refresh token (revoca acceso + sesión larga en el servidor; si no hay red, no bloquea) y luego `clearSession()`.
 
 ### 4.3 Normalización de Datos y Quirks del Backend
 
@@ -182,7 +183,7 @@ test_lectorapp/
 
 ## 5. Contrato de la API
 
-Todos los endpoints cuelgan de `Config.baseUrl`. Salvo `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password` y `/books/feed`, requieren `Authorization: Bearer <JWT>`.
+Todos los endpoints cuelgan de `Config.baseUrl`. Salvo `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password` y `/books/feed`, requieren `Authorization: Bearer <JWT>`.
 
 ### Formato de errores
 
@@ -212,11 +213,12 @@ Todas las respuestas de error tienen la forma `{ "error": string, "code": string
 
 ### Autenticación (`/auth`)
 
-- `POST /auth/login` — Body: `{ email | username, password }` → `{ token, user }`.
-- `POST /auth/register` — Body: `{ username, email, password }` → `201 { token, user }`.
-- `POST /auth/logout` — Requiere token. Lo revoca (blacklist por hash SHA-256) → `{ success: true }`.
+- `POST /auth/login` — Body: `{ email | username, password }` → `{ token, refresh_token, user }`.
+- `POST /auth/register` — Body: `{ username, email, password }` → `201 { token, refresh_token, user }`.
+- `POST /auth/refresh` — Body: `{ refresh_token }` → `{ token, refresh_token }`. **Rota**: el usado queda revocado. Reusar uno ya rotado revoca toda la sesión (familia) → 401.
+- `POST /auth/logout` — Header `Authorization` (si el acceso sigue vigente, se agrega a la blacklist por hash) y/o body `{ refresh_token }` (revoca su familia). Al menos uno válido, si no → 401.
 - `POST /auth/forgot-password` — Body: `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Envía un código de 6 dígitos por email (vence en 15 min; 1 por minuto por cuenta; 5/hora por IP).
-- `POST /auth/reset-password` — Body: `{ email, code, password }` → `{ token, user }` (sesión nueva). Máx. 5 intentos por código; cierra todas las sesiones anteriores de la cuenta (`users.password_changed_at`). Código inválido/vencido → 400.
+- `POST /auth/reset-password` — Body: `{ email, code, password }` → `{ token, refresh_token, user }` (sesión nueva). Máx. 5 intentos por código; cierra todas las sesiones anteriores (también los refresh tokens) de la cuenta (`users.password_changed_at`). Código inválido/vencido → 400.
 
 ### Libros (`/books`)
 
