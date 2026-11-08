@@ -274,6 +274,8 @@ flutter build apk --release --obfuscate --split-debug-info=build/symbols
 flutter build appbundle --release --obfuscate --split-debug-info=build/symbols   # para Google Play
 
 # Regenerar íconos o splash screen (si se modifican en pubspec.yaml)
+# Fuentes en assets/icon/ (TODAS con fondo transparente salvo icon_legacy.png). Si se regeneran
+# desde una imagen opaca se pierde el ícono temático (capa monochrome) y el splash muestra un cuadrado.
 dart run flutter_launcher_icons
 dart run flutter_native_splash:create
 

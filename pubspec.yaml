@@ -26,13 +26,14 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.13.1  # Generador de Íconos
+  flutter_launcher_icons: ^0.14.4  # Generador de Íconos (>=0.14 para la capa monochrome)
   flutter_native_splash: ^2.3.1
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/
+  # La carpeta assets/ NO se empaqueta en la app: solo contiene las imágenes fuente para
+  # generar íconos y splash (el código no las usa). Si algún día se usa una imagen en la UI,
+  # declararla aquí individualmente.
   # assets:
   #  - images/a_dot_burr.jpeg
   #  - images/a_dot_ham.jpeg
@@ -49,16 +50,31 @@ flutter:
   #         weight: 700
 
 
+# Íconos y splash: fuentes en assets/icon/ (generadas desde el ícono original transparente).
+# Regenerar con:
+#   dart run flutter_launcher_icons
+#   dart run flutter_native_splash:create
+# IMPORTANTE: las imágenes del primer plano deben tener FONDO TRANSPARENTE; si no, se pierde el
+# ícono temático (Android 13+ / HyperOS) y el splash muestra un cuadrado.
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/logo.png"
-  adaptive_icon_background: "#FDFBF7" # Color Crema
-  adaptive_icon_foreground: "assets/logo.png"
-  
+  remove_alpha_ios: true                       # iOS no admite íconos con transparencia
+  image_path: "assets/icon/icon_legacy.png"    # Android < 8, iOS y web: libro sobre crema
+  adaptive_icon_background: "#FDFBF7"          # Crema
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"   # libro transparente, ya con margen seguro
+  adaptive_icon_foreground_inset: 0            # el margen ya viene en la imagen
+  adaptive_icon_monochrome: "assets/icon/icon_monochrome.png"   # ícono temático (Android 13+ / HyperOS)
+
 flutter_native_splash:
-  color: "#FDFBF7" # Fondo Crema
-  image: "assets/logo.png" # Tu libro en el centro
+  # Android < 12, iOS y web
+  color: "#FDFBF7"                             # Crema (tema claro)
+  image: "assets/icon/splash.png"
+  color_dark: "#1C1917"                        # Café de Medianoche (modo oscuro del sistema)
+  image_dark: "assets/icon/splash.png"
+  # Android 12+: el sistema dibuja el ícono dentro de un círculo => imagen con margen
   android_12:
     color: "#FDFBF7"
-    image: "assets/logo.png"
+    image: "assets/icon/splash_android12.png"
+    color_dark: "#1C1917"
+    image_dark: "assets/icon/splash_android12.png"
