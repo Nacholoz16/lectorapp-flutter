@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SOLO para builds de debug (este archivo vive en src/debug y no entra en el APK de release).
+  Permite HTTP sin TLS únicamente hacia la API local del emulador (10.0.2.2 = localhost del PC).
+  Todo lo demás sigue exigiendo HTTPS.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

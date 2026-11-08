@@ -15,24 +15,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
+  // Mismas reglas que valida la API (registerSchema): así el usuario ve el error
+  // al instante, sin esperar la respuesta del servidor.
+  static final _usernameRegex = RegExp(r'^[a-zA-Z0-9_.\-]{3,30}$');
+  static final _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  static const _minPasswordLength = 8;
+
+  String? _validate(String username, String email, String password) {
+    if (username.isEmpty || email.isEmpty || password.isEmpty) {
+      return 'Por favor, llena todos los campos';
+    }
+    if (!_usernameRegex.hasMatch(username)) {
+      return 'El nombre de usuario debe tener entre 3 y 30 caracteres '
+          '(letras, números, punto, guion o guion bajo, sin espacios)';
+    }
+    if (!_emailRegex.hasMatch(email)) {
+      return 'El correo electrónico no es válido';
+    }
+    if (password.length < _minPasswordLength) {
+      return 'La contraseña debe tener al menos $_minPasswordLength caracteres';
+    }
+    return null;
+  }
+
   Future<void> _onRegister() async {
-    if (_usernameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Por favor, llena todos los campos'),
-          backgroundColor: Colors.red));
+    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    final error = _validate(username, email, password);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error), backgroundColor: Colors.red));
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      await AuthService().register(
-        _usernameController.text.trim(),
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
-      );
+      await AuthService().register(username, email, password);
 
       // Si el registro es exitoso, viajamos directo al Home eliminando el historial
       if (mounted) {
@@ -120,7 +141,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 controller: _passwordController,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  hintText: 'Contraseña',
+                  hintText: 'Contraseña (mínimo 8 caracteres)',
                   prefixIcon: Icon(Icons.lock_outline, color: Colors.grey),
                 ),
               ),

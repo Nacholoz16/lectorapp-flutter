@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Solo debug: permite HTTP hacia la API local del emulador (ver res/xml/network_security_config.xml). -->
+    <application android:networkSecurityConfig="@xml/network_security_config" />
 </manifest>
