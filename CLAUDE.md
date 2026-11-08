@@ -273,6 +273,13 @@ flutter run -d <device-id> --dart-define=API_BASE_URL=http://localhost:3000/api
 # En VS Code: configuraciones "LectorApp (API local - teléfono / emulador / producción)"
 # en .vscode/launch.json (la de teléfono hace el adb reverse automáticamente).
 
+# Vista previa de diseño en el navegador (sin teléfono). --web-port=4200 es obligatorio:
+# es el origen localhost que la API permite por CORS. El cronómetro en segundo plano no
+# funciona en web (TimerBackgroundService.isSupported = false); el resto de la UI sí.
+# En Chrome: DevTools (F12) → modo dispositivo para ver tamaño de teléfono. Hot reload: r.
+flutter run -d chrome --web-port=4200 --dart-define=API_BASE_URL=http://localhost:3000/api
+# (configuraciones "LectorApp (Web - Chrome, ...)" en .vscode/launch.json)
+
 # Ejecutar contra PRODUCCIÓN (sin dart-define)
 flutter run
 

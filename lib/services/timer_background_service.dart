@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -136,7 +137,16 @@ void onStart(ServiceInstance service) async {
 
 // ─── Clase pública de acceso al servicio ─────────────────────────────────────
 class TimerBackgroundService {
+  /// El servicio en segundo plano solo existe en Android/iOS. En web (vista previa de diseño
+  /// en el navegador) o escritorio no hay implementación y `configure` lanzaría una excepción
+  /// antes de `runApp`, dejando la app en blanco.
+  static bool get isSupported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   static Future<void> initializeService() async {
+    if (!isSupported) return;
     final service = FlutterBackgroundService();
 
     // Crear canal de notificaciones (requerido en Android 8+)
@@ -180,6 +190,7 @@ class TimerBackgroundService {
     Map<String, dynamic>? selectedLog,
     int initialSeconds = 0,
   }) async {
+    if (!isSupported) return;
     final service = FlutterBackgroundService();
     final running = await service.isRunning();
     if (!running) {
@@ -199,9 +210,12 @@ class TimerBackgroundService {
     });
   }
 
-  static void pause() => FlutterBackgroundService().invoke('pauseTimer');
-  static void resume() => FlutterBackgroundService().invoke('resumeTimer');
-  static void stop() => FlutterBackgroundService().invoke('stopTimer');
-  static void stopService() =>
-      FlutterBackgroundService().invoke('stopService');
+  static void pause() => _invoke('pauseTimer');
+  static void resume() => _invoke('resumeTimer');
+  static void stop() => _invoke('stopTimer');
+  static void stopService() => _invoke('stopService');
+
+  static void _invoke(String method) {
+    if (isSupported) FlutterBackgroundService().invoke(method);
+  }
 }

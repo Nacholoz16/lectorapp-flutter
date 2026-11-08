@@ -36,7 +36,11 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
       _updateCurrentPageText();
     }
 
-    _requestNotificationPermission();
+    // En web/escritorio (vista previa de diseño) no hay servicio en segundo plano:
+    // el modal se dibuja, pero el cronómetro no corre.
+    if (!TimerBackgroundService.isSupported) return;
+
+    unawaited(_requestNotificationPermission());
 
     _serviceSubscription = FlutterBackgroundService()
         .on('update')
