@@ -1,9 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config.dart';
-import '../screens/login_screen.dart';
 import 'api_client.dart';
 
 class AuthService {
@@ -12,63 +8,76 @@ class AuthService {
   factory AuthService() => _instance;
   AuthService._internal();
 
+  final _api = ApiClient();
+
+  /// Inicia sesión con email (si contiene '@') o username.
+  /// Lanza [ApiException] con el mensaje del backend (ej. "Credenciales inválidas").
   Future<void> login(String identifier, String password) async {
-    final Map<String, dynamic> payload = identifier.contains('@')
+    final payload = identifier.contains('@')
         ? {'email': identifier, 'password': password}
         : {'username': identifier, 'password': password};
 
-    final response = await http.post(
-      Uri.parse('${Config.baseUrl}/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode(payload),
-    ).timeout(const Duration(seconds: 15));
+    final data =
+        await _api.post('/auth/login', body: payload, redirectOn401: false);
+    await _saveSession(data);
+  }
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final prefs = await SharedPreferences.getInstance();
-      // Guardar token en caché + SecureStorage vía ApiClient
-      await ApiClient().setToken(data['token']);
-      await prefs.setString('user-data', json.encode(data['user']));
-    } else {
-      final errorData = json.decode(response.body);
-      throw Exception(errorData['error'] ?? 'Error al iniciar sesión');
+  /// Registra un nuevo usuario y deja la sesión iniciada.
+  Future<void> register(String username, String email, String password) async {
+    final data = await _api.post(
+      '/auth/register',
+      body: {'username': username, 'email': email, 'password': password},
+      redirectOn401: false,
+    );
+    await _saveSession(data);
+  }
+
+  Future<void> _saveSession(dynamic data) async {
+    if (data is! Map || data['token'] is! String) {
+      throw ApiException('Respuesta inválida del servidor');
     }
+    await _api.setToken(data['token']);
+
+    // Solo lo necesario para la UI: no persistimos el email en almacenamiento sin cifrar.
+    final user = data['user'] as Map? ?? {};
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      ApiClient.userDataKey,
+      json.encode({
+        'id': user['id'],
+        'username': user['username'],
+        'avatar': user['avatar'],
+      }),
+    );
   }
 
   /// Obtener el token actual (desde caché en memoria).
-  Future<String?> getToken() async {
-    return ApiClient().getToken();
-  }
+  Future<String?> getToken() => _api.getToken();
 
   /// Obtener los datos del usuario logueado guardados.
   Future<Map<String, dynamic>?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
-    final userStr = prefs.getString('user-data');
-    if (userStr != null) {
-      return json.decode(userStr);
+    final userStr = prefs.getString(ApiClient.userDataKey);
+    if (userStr == null) return null;
+    try {
+      return json.decode(userStr) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
     }
-    return null;
   }
 
-  /// Verifica si un JWT es válido decodificando su payload.
+  /// Verifica localmente si un JWT no ha expirado (decodifica el payload, no valida la firma:
+  /// la firma la valida siempre el backend).
   static bool isJwtValid(String? token) {
     if (token == null || token.isEmpty) return false;
     try {
       final parts = token.split('.');
       if (parts.length != 3) return false;
 
-      String payload = parts[1];
-      switch (payload.length % 4) {
-        case 2:
-          payload += '==';
-          break;
-        case 3:
-          payload += '=';
-          break;
-      }
+      final payload = base64Url.normalize(parts[1]);
       final decoded = json.decode(utf8.decode(base64Url.decode(payload)));
-      final exp = decoded['exp'] as int?;
-      if (exp == null) return false;
+      final exp = decoded['exp'];
+      if (exp is! int) return false;
 
       return DateTime.now()
           .isBefore(DateTime.fromMillisecondsSinceEpoch(exp * 1000));
@@ -78,52 +87,19 @@ class AuthService {
   }
 
   /// Verifica si el token guardado existe y NO ha expirado.
-  Future<bool> isTokenValid() async {
-    final token = await getToken();
-    return isJwtValid(token);
-  }
+  Future<bool> isTokenValid() async => isJwtValid(await getToken());
 
-  /// Cerrar sesión borrando los datos.
+  /// Cierra sesión: revoca el token en el backend (para que no siga siendo válido
+  /// los días que le quedan) y luego borra los datos locales.
+  /// Si no hay red, igual cierra la sesión local.
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await ApiClient().setToken(null); // limpia caché + SecureStorage
-    await prefs.remove('user-data');
-  }
-
-  /// Forzar logout y redirigir a Login (usado por ApiClient en 401).
-  Future<void> forceLogout() async {
-    await logout();
-    final navigator = Config.navigatorKey.currentState;
-    if (navigator != null) {
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+    try {
+      if (await getToken() != null) {
+        await _api.post('/auth/logout', redirectOn401: false);
+      }
+    } catch (_) {
+      // Sin red o token ya inválido: no debe impedir cerrar sesión localmente.
     }
-  }
-
-  /// Registrar un nuevo usuario.
-  Future<void> register(String username, String email, String password) async {
-    final response = await http.post(
-      Uri.parse('${Config.baseUrl}/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'username': username,
-        'email': email,
-        'password': password,
-      }),
-    ).timeout(const Duration(seconds: 15));
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = json.decode(response.body);
-      final prefs = await SharedPreferences.getInstance();
-      await ApiClient().setToken(data['token']);
-      await prefs.setString('user-data', json.encode(data['user']));
-    } else {
-      final errorData = json.decode(response.body);
-      throw Exception(errorData['error'] ??
-          errorData['message'] ??
-          'Error al crear la cuenta');
-    }
+    await _api.clearSession();
   }
 }

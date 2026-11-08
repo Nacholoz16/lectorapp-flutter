@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -7,75 +9,141 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config.dart';
 import '../screens/login_screen.dart';
 
-/// Cliente HTTP centralizado.
+/// Cliente HTTP centralizado. TODA llamada a la API pasa por aquí.
 /// - Token cacheado en memoria (solo lee SecureStorage al arranque).
 /// - Inyecta automáticamente el token en los headers.
 /// - Detecta respuestas 401 y redirige a Login limpiando la sesión.
 /// - Timeout de 15 segundos en todas las peticiones.
-/// - Logs de depuración solo en modo debug.
+/// - Convierte cualquier fallo (red, timeout, JSON inválido, HTTP 4xx/5xx) en [ApiException].
+/// - Logs de depuración solo en modo debug (sin bodies: pueden llevar contraseñas).
 class ApiClient {
   // Singleton
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
   ApiClient._internal();
 
+  static const _timeout = Duration(seconds: 15);
+  static const _tokenKey = 'auth-token';
+  static const userDataKey = 'user-data';
+  static const feedCacheKey = 'cached_global_feed';
+
   final _secureStorage = const FlutterSecureStorage();
+
+  /// Cliente único y reutilizado: mantiene las conexiones abiertas (keep-alive)
+  /// en vez de abrir un socket nuevo por petición.
+  final http.Client _httpClient = http.Client();
 
   /// Token cacheado en memoria para evitar I/O de SecureStorage en cada request.
   String? _cachedToken;
+
+  /// Evita que varias peticiones con 401 simultáneas empujen varias LoginScreen.
+  bool _isRedirectingToLogin = false;
+
+  // ─── Token ────────────────────────────────────────────────────────────────
 
   /// Escribe el token en memoria y en SecureStorage.
   Future<void> setToken(String? token) async {
     _cachedToken = token;
     if (token != null) {
-      await _secureStorage.write(key: 'auth-token', value: token);
+      await _secureStorage.write(key: _tokenKey, value: token);
     } else {
-      await _secureStorage.delete(key: 'auth-token');
+      await _secureStorage.delete(key: _tokenKey);
     }
   }
 
   /// Carga el token desde SecureStorage una sola vez al arranque.
   Future<void> loadToken() async {
-    _cachedToken = await _secureStorage.read(key: 'auth-token');
+    _cachedToken = await _secureStorage.read(key: _tokenKey);
   }
 
   /// Lee el token actual (desde caché en memoria).
   Future<String?> getToken() async {
-    _cachedToken ??= await _secureStorage.read(key: 'auth-token');
+    _cachedToken ??= await _secureStorage.read(key: _tokenKey);
     return _cachedToken;
   }
 
-  /// Headers comunes para todas las peticiones autenticadas.
-  Future<Map<String, String>> _buildHeaders() async {
+  /// Borra todos los datos de sesión locales (token, usuario y feed cacheado).
+  Future<void> clearSession() async {
+    await setToken(null);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(userDataKey);
+    await prefs.remove(feedCacheKey);
+  }
+
+  // ─── Métodos públicos ─────────────────────────────────────────────────────
+
+  Future<dynamic> get(String path) => _send('GET', path);
+
+  /// [redirectOn401]: false en login/registro/logout, donde un 401 significa
+  /// "credenciales inválidas" o "token ya revocado", no "sesión expirada".
+  Future<dynamic> post(String path,
+          {Map<String, dynamic>? body, bool redirectOn401 = true}) =>
+      _send('POST', path, body: body, redirectOn401: redirectOn401);
+
+  Future<dynamic> put(String path, {Map<String, dynamic>? body}) =>
+      _send('PUT', path, body: body);
+
+  Future<dynamic> delete(String path) => _send('DELETE', path);
+
+  // ─── Implementación ───────────────────────────────────────────────────────
+
+  Future<dynamic> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    bool redirectOn401 = true,
+  }) async {
+    final uri = Uri.parse('${Config.baseUrl}$path');
     final token = await getToken();
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
+    final request = http.Request(method, uri)
+      ..headers['Content-Type'] = 'application/json'
+      ..headers['Accept'] = 'application/json';
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    if (body != null) request.body = json.encode(body);
+
+    if (kDebugMode) debugPrint('[HTTP] $method $uri');
+
+    final http.Response response;
+    try {
+      final streamed = await _httpClient.send(request).timeout(_timeout);
+      response = await http.Response.fromStream(streamed).timeout(_timeout);
+    } on TimeoutException {
+      throw ApiException('El servidor tardó demasiado en responder. Intenta de nuevo.');
+    } on SocketException {
+      throw ApiException('Sin conexión a internet.');
+    } on http.ClientException {
+      throw ApiException('No se pudo conectar con el servidor.');
+    }
+
+    if (kDebugMode) debugPrint('[HTTP] ${response.statusCode} $method $path');
+
+    if (response.statusCode == 401 && redirectOn401) {
+      await _handleSessionExpired();
+      throw ApiException('Sesión expirada', statusCode: 401);
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return null;
+      try {
+        return json.decode(response.body);
+      } on FormatException {
+        throw ApiException('Respuesta inválida del servidor',
+            statusCode: response.statusCode);
+      }
+    }
+
+    throw ApiException(
+      _extractErrorMessage(response),
+      statusCode: response.statusCode,
+    );
   }
 
-  void _logRequest(String method, Uri uri, {String? body}) {
-    if (!kDebugMode) return;
-    debugPrint('\n--- [HTTP REQUEST] ---');
-    debugPrint('$method ${uri.toString()}');
-    if (body != null) debugPrint('Body: $body');
-  }
-
-  void _logResponse(http.Response response) {
-    if (!kDebugMode) return;
-    debugPrint('--- [HTTP RESPONSE] ---');
-    debugPrint('Status Code: ${response.statusCode}');
-    debugPrint('Body: ${response.body}');
-    debugPrint('----------------------\n');
-  }
-
-  /// Maneja respuestas 401: limpia sesión y redirige a Login.
-  Future<bool> _handle401(http.Response response) async {
-    if (response.statusCode == 401) {
-      await setToken(null); // limpia caché + SecureStorage
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('user-data');
-
+  /// Limpia la sesión y vuelve a Login (una sola vez aunque fallen varias peticiones a la vez).
+  Future<void> _handleSessionExpired() async {
+    if (_isRedirectingToLogin) return;
+    _isRedirectingToLogin = true;
+    try {
+      await clearSession();
       final navigator = Config.navigatorKey.currentState;
       if (navigator != null) {
         navigator.pushAndRemoveUntil(
@@ -83,126 +151,31 @@ class ApiClient {
           (route) => false,
         );
       }
-      return true;
+    } finally {
+      _isRedirectingToLogin = false;
     }
-    return false;
   }
 
-  static const _timeout = Duration(seconds: 15);
-
-  /// GET request autenticado.
-  Future<dynamic> get(String path) async {
-    final headers = await _buildHeaders();
-    final uri = Uri.parse('${Config.baseUrl}$path');
-    _logRequest('GET', uri);
-
-    final response =
-        await http.get(uri, headers: headers).timeout(_timeout);
-    _logResponse(response);
-
-    if (await _handle401(response)) {
-      throw ApiException('Sesión expirada', statusCode: 401);
-    }
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body);
-    }
-
-    throw ApiException(
-      _extractErrorMessage(response),
-      statusCode: response.statusCode,
-    );
-  }
-
-  /// POST request autenticado.
-  Future<dynamic> post(String path, {Map<String, dynamic>? body}) async {
-    final headers = await _buildHeaders();
-    final uri = Uri.parse('${Config.baseUrl}$path');
-    final encodedBody = body != null ? json.encode(body) : null;
-    _logRequest('POST', uri, body: encodedBody);
-
-    final response = await http
-        .post(uri, headers: headers, body: encodedBody)
-        .timeout(_timeout);
-    _logResponse(response);
-
-    if (await _handle401(response)) {
-      throw ApiException('Sesión expirada', statusCode: 401);
-    }
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body);
-    }
-
-    throw ApiException(
-      _extractErrorMessage(response),
-      statusCode: response.statusCode,
-    );
-  }
-
-  /// PUT request autenticado.
-  Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
-    final headers = await _buildHeaders();
-    final uri = Uri.parse('${Config.baseUrl}$path');
-    final encodedBody = body != null ? json.encode(body) : null;
-    _logRequest('PUT', uri, body: encodedBody);
-
-    final response = await http
-        .put(uri, headers: headers, body: encodedBody)
-        .timeout(_timeout);
-    _logResponse(response);
-
-    if (await _handle401(response)) {
-      throw ApiException('Sesión expirada', statusCode: 401);
-    }
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body);
-    }
-
-    throw ApiException(
-      _extractErrorMessage(response),
-      statusCode: response.statusCode,
-    );
-  }
-
-  /// DELETE request autenticado.
-  Future<dynamic> delete(String path) async {
-    final headers = await _buildHeaders();
-    final uri = Uri.parse('${Config.baseUrl}$path');
-    _logRequest('DELETE', uri);
-
-    final response =
-        await http.delete(uri, headers: headers).timeout(_timeout);
-    _logResponse(response);
-
-    if (await _handle401(response)) {
-      throw ApiException('Sesión expirada', statusCode: 401);
-    }
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (response.body.isEmpty) return null;
-      return json.decode(response.body);
-    }
-
-    throw ApiException(
-      _extractErrorMessage(response),
-      statusCode: response.statusCode,
-    );
-  }
-
-  /// Extrae el mensaje de error del body de la respuesta.
-  String _extractErrorMessage(http.Response response) {
+  /// Extrae el mensaje de error del body (`{ error }` o `{ message }`).
+  /// Si el body no es JSON (ej. página HTML de Nginx en un 502), usa un mensaje genérico.
+  @visibleForTesting
+  static String extractErrorMessage(int statusCode, String body) {
     try {
-      final data = json.decode(response.body);
-      return data['error'] ?? data['message'] ?? 'Error ${response.statusCode}';
-    } catch (_) {
-      return 'Error ${response.statusCode}';
-    }
+      final data = json.decode(body);
+      if (data is Map) {
+        final msg = data['error'] ?? data['message'];
+        if (msg is String && msg.isNotEmpty) return msg;
+      }
+    } catch (_) {}
+    if (statusCode >= 500) return 'El servidor no está disponible. Intenta más tarde.';
+    return 'Error $statusCode';
   }
+
+  String _extractErrorMessage(http.Response response) =>
+      extractErrorMessage(response.statusCode, response.body);
 }
 
-/// Excepción personalizada para errores de API.
+/// Excepción para cualquier error de API. `statusCode` es 0 si no hubo respuesta (red/timeout).
 class ApiException implements Exception {
   final String message;
   final int statusCode;

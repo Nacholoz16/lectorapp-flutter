@@ -1,3 +1,4 @@
+import '../utils/json_utils.dart';
 import 'reading_log.dart';
 
 /// Modelo tipado para el perfil de un usuario.
@@ -28,10 +29,10 @@ class UserProfile {
       username: json['username'] ?? '',
       bio: json['bio'],
       avatarUrl: json['avatar_url'],
-      isProfilePublic: json['is_profile_public'] == true,
-      areStatsPublic: json['are_stats_public'] ?? true,
-      isOwnProfile: json['is_own_profile'] == true,
-      isPrivateLock: json['is_private_lock'] == true,
+      isProfilePublic: asBool(json['is_profile_public']),
+      areStatsPublic: asBool(json['are_stats_public'], fallback: true),
+      isOwnProfile: asBool(json['is_own_profile']),
+      isPrivateLock: asBool(json['is_private_lock']),
       library: rawLibrary
           .map((item) => ReadingLog.fromJson(item as Map<String, dynamic>))
           .toList(),

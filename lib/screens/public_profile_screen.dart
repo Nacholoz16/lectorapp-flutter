@@ -65,23 +65,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       });
     }
     try {
+      // /users/:username ya incluye la primera página de la biblioteca (vacía si es privado):
+      // no hace falta pedir /library?page=1 por separado.
       final profileData = await UserService().getProfile(widget.username);
-      List<dynamic> libraryData = [];
-
-      if (profileData['is_profile_public'] == true) {
-        try {
-          libraryData = await UserService().getUserLibrary(widget.username,
-              page: _page, limit: _limit);
-          profileData['library'] = libraryData;
-        } catch (_) {
-          if (profileData['library'] is List) {
-            libraryData = profileData['library'];
-          }
-          _hasMore = false;
-        }
-      } else {
-        _hasMore = false;
-      }
+      final libraryData =
+          profileData['library'] is List ? profileData['library'] as List : const [];
 
       if (mounted) {
         setState(() {

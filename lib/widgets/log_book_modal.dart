@@ -57,7 +57,8 @@ class _LogBookModalState extends State<LogBookModal> {
         'authors': widget.book['authors'] ?? widget.book['author'],
         'cover_url': widget.book['cover_url'],
         'isbn': widget.book['isbn'],
-        'page_count': widget.book['page_count']
+        'page_count': widget.book['page_count'],
+        'published_year': widget.book['published_year']
       },
       'logData': {
         'status': _status,

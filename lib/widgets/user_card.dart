@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:test_lectorapp/book_cover.dart';
+import 'package:test_lectorapp/utils/json_utils.dart';
 
 class UserCard extends StatelessWidget {
   final Map<String, dynamic> item;
@@ -50,6 +51,7 @@ class UserCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
+    final hasLiked = asBool(item['has_liked']);
     final date = DateTime.tryParse(item['created_at'] ?? '') ?? DateTime.now();
     final formattedDate = DateFormat('MMM d', 'es').format(date);
 
@@ -274,8 +276,8 @@ class UserCard extends StatelessWidget {
                 children: [
                   IconButton(
                     icon: Icon(
-                      item['has_liked'] == true ? Icons.favorite : Icons.favorite_border,
-                      color: item['has_liked'] == true ? const Color(0xFFE57373) : Colors.grey.shade500,
+                      hasLiked ? Icons.favorite : Icons.favorite_border,
+                      color: hasLiked ? const Color(0xFFE57373) : Colors.grey.shade500,
                       size: 22,
                     ),
                     onPressed: onLikeClick,
@@ -283,8 +285,8 @@ class UserCard extends StatelessWidget {
                   Text(
                     '${item['likes_count'] ?? 0}',
                     style: TextStyle(
-                      color: item['has_liked'] == true ? const Color(0xFFE57373) : Colors.grey.shade600,
-                      fontWeight: item['has_liked'] == true ? FontWeight.bold : FontWeight.normal,
+                      color: hasLiked ? const Color(0xFFE57373) : Colors.grey.shade600,
+                      fontWeight: hasLiked ? FontWeight.bold : FontWeight.normal,
                       fontSize: 14,
                     ),
                   ),

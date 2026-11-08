@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:test_lectorapp/services/reading_service.dart';
 import '../widgets/user_card.dart';
+import '../utils/json_utils.dart';
 import 'package:test_lectorapp/screens/book_detail_screen.dart';
 import 'package:test_lectorapp/screens/public_profile_screen.dart';
 
@@ -172,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen>
     final logId = item['id'];
     if (logId == null) return;
 
-    final currentLiked = item['has_liked'] == true;
+    final currentLiked = asBool(item['has_liked']);
     final currentCount = (item['likes_count'] is int) ? item['likes_count'] : 0;
 
     setState(() {

@@ -96,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Meta de Lectura Anual'),
         content: TextField(
           controller: controller,
@@ -107,23 +107,38 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               final val = int.tryParse(controller.text);
-              if (val != null && val > 0) {
-                Navigator.pop(context);
-                await UserService().setReadingGoal(val);
-                _loadStats();
+              if (val != null && val > 0 && val <= 1000) {
+                Navigator.pop(dialogContext);
+                _saveGoal(val);
               }
             },
             child: const Text('Guardar'),
           ),
         ],
       ),
-    );
+    ).then((_) => controller.dispose());
+  }
+
+  Future<void> _saveGoal(int targetBooks) async {
+    try {
+      await UserService().setReadingGoal(targetBooks);
+      if (mounted) _loadStats();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo guardar la meta: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _onScroll() {
@@ -149,21 +164,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       final currentUser = await AuthService().getCurrentUser();
       if (currentUser != null && currentUser['username'] != null) {
         final username = currentUser['username'];
+        // /users/:username ya incluye la primera página de la biblioteca:
+        // no hace falta pedir /library?page=1 por separado.
         final profileData = await UserService().getProfile(username);
-        
-        List<dynamic> libraryData = [];
-        try {
-          libraryData = await UserService().getUserLibrary(username,
-              page: _page, limit: _limit);
-          profileData['library'] = libraryData;
-        } catch (_) {
-          // Si el servidor de producción aún no ha desplegado /users/:username/library (da 404),
-          // usamos la biblioteca que vino incluida en profileData.
-          if (profileData['library'] is List) {
-            libraryData = profileData['library'];
-          }
-          _hasMore = false; // No reintentar paginación posterior si el endpoint no existe en prod
-        }
+        final libraryData =
+            profileData['library'] is List ? profileData['library'] as List : const [];
 
         if (mounted) {
           setState(() {

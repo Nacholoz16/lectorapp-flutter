@@ -46,9 +46,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
           _seconds = event['seconds'] ?? _seconds;
           _isRunning = event['isRunning'] ?? _isRunning;
           _isFinished = event['isFinished'] ?? _isFinished;
+          // Solo reescribir el campo de página si cambió el libro; si no, cada
+          // 'update' (1 por segundo) borraría lo que el usuario está escribiendo.
           if (event['selectedLog'] != null) {
-            _selectedLog = Map<String, dynamic>.from(event['selectedLog']);
-            _updateCurrentPageText();
+            final incoming = Map<String, dynamic>.from(event['selectedLog']);
+            final changedBook = incoming['id'] != _selectedLog?['id'];
+            _selectedLog = incoming;
+            if (changedBook) _updateCurrentPageText();
           }
         });
       }
@@ -87,6 +91,7 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
       selectedLog: _selectedLog,
       initialSeconds: _seconds,
     );
+    if (!mounted) return;
     setState(() {
       _isRunning = true;
     });

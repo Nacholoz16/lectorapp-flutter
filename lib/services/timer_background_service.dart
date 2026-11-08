@@ -23,7 +23,7 @@ void onStart(ServiceInstance service) async {
 
   Timer? ticker;
 
-  String _fmt(int totalSeconds) {
+  String fmt(int totalSeconds) {
     final h = (totalSeconds / 3600).floor();
     final m = ((totalSeconds % 3600) / 60).floor();
     final s = totalSeconds % 60;
@@ -43,8 +43,8 @@ void onStart(ServiceInstance service) async {
       service.setForegroundNotificationInfo(
         title: bookTitle,
         content: isRunning
-            ? 'Leyendo… ${_fmt(seconds)}'
-            : 'Pausado — ${_fmt(seconds)}',
+            ? 'Leyendo… ${fmt(seconds)}'
+            : 'Pausado — ${fmt(seconds)}',
       );
     }
   }
@@ -129,6 +129,9 @@ void onStart(ServiceInstance service) async {
       service.stopSelf();
     }
   });
+
+  // Todos los listeners están registrados: avisar a la UI que ya puede enviar comandos.
+  service.invoke('ready');
 }
 
 // ─── Clase pública de acceso al servicio ─────────────────────────────────────
@@ -180,9 +183,14 @@ class TimerBackgroundService {
     final service = FlutterBackgroundService();
     final running = await service.isRunning();
     if (!running) {
+      // Escuchar 'ready' ANTES de arrancar para no perder el evento. Si el isolate
+      // no responde a tiempo (dispositivo lento), se envía el comando igualmente.
+      final ready = service.on('ready').first.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => null,
+          );
       await service.startService();
-      // Pequeña espera para que el engine del isolate esté listo
-      await Future.delayed(const Duration(milliseconds: 300));
+      await ready;
     }
     service.invoke('startTimer', {
       'bookTitle': bookTitle,
