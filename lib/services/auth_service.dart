@@ -22,6 +22,33 @@ class AuthService {
     await _saveSession(data);
   }
 
+  /// Recuperación, paso 1: pide que se envíe un código de 6 dígitos al email.
+  /// La API responde lo mismo exista o no la cuenta; devuelve ese mensaje.
+  Future<String> requestPasswordReset(String email) async {
+    final data = await _api.post(
+      '/auth/forgot-password',
+      body: {'email': email},
+      redirectOn401: false,
+    );
+    return (data is Map ? data['message'] : null)?.toString() ??
+        'Si el email está registrado, te enviamos un código.';
+  }
+
+  /// Recuperación, paso 2: código + contraseña nueva. Si es correcto deja la sesión iniciada
+  /// (la API cierra todas las sesiones anteriores de esa cuenta).
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String password,
+  }) async {
+    final data = await _api.post(
+      '/auth/reset-password',
+      body: {'email': email, 'code': code, 'password': password},
+      redirectOn401: false,
+    );
+    await _saveSession(data);
+  }
+
   /// Registra un nuevo usuario y deja la sesión iniciada.
   Future<void> register(String username, String email, String password) async {
     final data = await _api.post(

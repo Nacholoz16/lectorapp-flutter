@@ -91,7 +91,8 @@ test_lectorapp/
 │   ├── utils/
 │   │   └── json_utils.dart           # asBool / asInt: lectura tolerante de JSON (bool o 1/0, int o String)
 │   ├── screens/
-│   │   ├── login_screen.dart         # Inicio de sesión (acepta email o username)
+│   │   ├── login_screen.dart         # Inicio de sesión (acepta email o username) + "¿Olvidaste tu contraseña?"
+│   │   ├── forgot_password_screen.dart # Recuperar cuenta: email → código de 6 dígitos + contraseña nueva
 │   │   ├── register_screen.dart      # Registro con validación local (mismas reglas que la API)
 │   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar: Inicio · Biblioteca · Perfil (TabsScreen.select)
 │   │   ├── home_screen.dart          # Tab 0: saludo plegable, barra de búsqueda, "Sigues leyendo" y feed por cursor
@@ -181,7 +182,7 @@ test_lectorapp/
 
 ## 5. Contrato de la API
 
-Todos los endpoints cuelgan de `Config.baseUrl`. Salvo `/auth/login`, `/auth/register` y `/books/feed`, requieren `Authorization: Bearer <JWT>`.
+Todos los endpoints cuelgan de `Config.baseUrl`. Salvo `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password` y `/books/feed`, requieren `Authorization: Bearer <JWT>`.
 
 ### Formato de errores
 
@@ -214,6 +215,8 @@ Todas las respuestas de error tienen la forma `{ "error": string, "code": string
 - `POST /auth/login` — Body: `{ email | username, password }` → `{ token, user }`.
 - `POST /auth/register` — Body: `{ username, email, password }` → `201 { token, user }`.
 - `POST /auth/logout` — Requiere token. Lo revoca (blacklist por hash SHA-256) → `{ success: true }`.
+- `POST /auth/forgot-password` — Body: `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Envía un código de 6 dígitos por email (vence en 15 min; 1 por minuto por cuenta; 5/hora por IP).
+- `POST /auth/reset-password` — Body: `{ email, code, password }` → `{ token, user }` (sesión nueva). Máx. 5 intentos por código; cierra todas las sesiones anteriores de la cuenta (`users.password_changed_at`). Código inválido/vencido → 400.
 
 ### Libros (`/books`)
 

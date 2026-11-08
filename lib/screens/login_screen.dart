@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'tabs_screen.dart'; // A donde iremos tras loguearnos
 import 'register_screen.dart';
+import 'forgot_password_screen.dart';
 import '../theme/lector_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../ui/feedback.dart';
@@ -109,7 +110,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   prefixIcon: Icon(Icons.lock_outline, color: context.lector.textSecondary),
                 ),
               ),
-              const SizedBox(height: 40),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    final id = _identifierController.text.trim();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ForgotPasswordScreen(
+                          initialEmail: id.contains('@') ? id : null,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('¿Olvidaste tu contraseña?'),
+                ),
+              ),
+              const SizedBox(height: 24),
 
               // Botón de Login (El ThemeService le da la forma de píldora y el color)
               SizedBox(
