@@ -291,6 +291,11 @@ npm run migrate      # migración idempotente (ejecutar en cada entorno tras des
 npm run cleanup      # borra tokens revocados expirados
 ```
 
+**Deploy a producción** (servidor Docker `ubuntu@155.181.180.178`, ver `../Lectorapp API/DEPLOY.md`):
+`git push origin main` en el repo de la API y luego ejecutar `deploy\deploy.bat` (usa PuTTY/`plink` + la llave `.ppk`).
+`deploy\deploy.bat <commit>` hace rollback. En el servidor, `~/[LECTORAPP]/api` es un clon git del repo de la API
+y los secretos están en `~/[LECTORAPP]/.env` (fuera de git). El front web viejo (`lectorFront`, Ionic) no se toca.
+
 ---
 
 ## 8. Reglas para Futuras Modificaciones
