@@ -24,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   bool get wantKeepAlive => true;
 
-  int _page = 1;
   final int _limit = 10;
   bool _hasMore = true;
   bool _isFetchingMore = false;
@@ -56,29 +55,24 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  /// Pregunta solo cuántas publicaciones hay más nuevas que la primera en pantalla
+  /// (una respuesta de pocos bytes en vez de descargar la primera página completa).
   Future<void> _checkForNewPosts() async {
+    if (feed.isEmpty) return;
+    final topId = asInt(feed.first['id'], fallback: -1);
+    if (topId < 0) return;
     try {
-      final freshFeed = await ReadingService().getGlobalFeed(page: 1, limit: _limit);
-      if (freshFeed.isNotEmpty && feed.isNotEmpty) {
-        final topCachedId = feed.first['id'];
-        int newCount = 0;
-        for (var post in freshFeed) {
-          if (post['id'] > topCachedId) {
-            newCount++;
-          } else {
-            break;
-          }
-        }
-        if (newCount > 0 && mounted) {
-          setState(() {
-            _newPostsCount = newCount;
-          });
-        }
+      final newCount = await ReadingService().countNewPosts(topId);
+      if (newCount > 0 && mounted) {
+        setState(() => _newPostsCount = newCount);
       }
     } catch (_) {
       // Ignorar fallos de red en background
     }
   }
+
+  /// Cursor para la siguiente página: id del último elemento cargado.
+  int? get _lastLoadedId => feed.isEmpty ? null : asInt(feed.last['id']);
 
   @override
   void dispose() {
@@ -101,14 +95,12 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         isLoading = true;
         _errorMessage = null;
-        _page = 1;
         _hasMore = true;
         _isFetchingMore = false;
       });
     }
     try {
-      final data =
-          await ReadingService().getGlobalFeed(page: _page, limit: _limit);
+      final data = await ReadingService().getGlobalFeed(limit: _limit);
       // Pre-decodificar portadas ANTES de revelar el feed
       await _precacheVisibleCovers(data);
       if (mounted) {
@@ -149,12 +141,10 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() => _isFetchingMore = true);
 
     try {
-      final nextPage = _page + 1;
-      final newData =
-          await ReadingService().getGlobalFeed(page: nextPage, limit: _limit);
+      final newData = await ReadingService()
+          .getGlobalFeed(beforeId: _lastLoadedId, limit: _limit);
       if (mounted) {
         setState(() {
-          _page = nextPage;
           feed.addAll(newData);
           _isFetchingMore = false;
           if (newData.length < _limit) {
@@ -174,27 +164,28 @@ class _HomeScreenState extends State<HomeScreen>
     if (logId == null) return;
 
     final currentLiked = asBool(item['has_liked']);
-    final currentCount = (item['likes_count'] is int) ? item['likes_count'] : 0;
+    final currentCount = asInt(item['likes_count']);
 
-    setState(() {
-      feed[index]['has_liked'] = !currentLiked;
-      feed[index]['likes_count'] = currentLiked ? (currentCount > 0 ? currentCount - 1 : 0) : currentCount + 1;
-    });
+    // Tras el await el feed puede haberse recargado: se actualiza la publicación por id,
+    // no por posición, para no marcar el like en otra tarjeta.
+    void applyToPost(bool liked, int count) {
+      final post = feed.firstWhere((p) => p['id'] == logId, orElse: () => null);
+      if (post == null) return;
+      post['has_liked'] = liked;
+      post['likes_count'] = count;
+    }
+
+    setState(() => applyToPost(
+        !currentLiked, currentLiked ? (currentCount > 0 ? currentCount - 1 : 0) : currentCount + 1));
 
     try {
-      final res = await ReadingService().toggleLike(logId);
+      final res = await ReadingService().toggleLike(asInt(logId));
       if (mounted) {
-        setState(() {
-          feed[index]['has_liked'] = res['liked'] == true;
-          feed[index]['likes_count'] = res['likes_count'] ?? 0;
-        });
+        setState(() => applyToPost(asBool(res['liked']), asInt(res['likes_count'])));
       }
     } catch (_) {
       if (mounted) {
-        setState(() {
-          feed[index]['has_liked'] = currentLiked;
-          feed[index]['likes_count'] = currentCount;
-        });
+        setState(() => applyToPost(currentLiked, currentCount));
       }
     }
   }

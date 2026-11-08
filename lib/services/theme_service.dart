@@ -229,6 +229,6 @@ class ThemeService {
   Future<void> loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final savedTheme = prefs.getString('app_theme') ?? 'light';
-    setTheme(savedTheme, save: false);
+    await setTheme(savedTheme, save: false);
   }
 }

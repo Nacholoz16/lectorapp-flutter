@@ -8,10 +8,20 @@ class ReadingService {
   ReadingService._internal();
   final _api = ApiClient();
 
-  Future<List<dynamic>> getGlobalFeed({int page = 1, int limit = 10}) async {
-    final data = await _api.get('/readings/feed?page=$page&limit=$limit');
+  /// Feed global paginado por cursor.
+  /// [beforeId]: id del último elemento ya mostrado (null = primera página).
+  Future<List<dynamic>> getGlobalFeed({int? beforeId, int limit = 10}) async {
+    final cursor = beforeId != null ? '&before_id=$beforeId' : '';
+    final data = await _api.get('/readings/feed?limit=$limit$cursor');
     if (data is List) return data;
     return [];
+  }
+
+  /// Cuántas publicaciones públicas hay más nuevas que [afterId] (banner de novedades).
+  Future<int> countNewPosts(int afterId) async {
+    final data = await _api.get('/readings/feed/new-count?after_id=$afterId');
+    if (data is Map && data['count'] is int) return data['count'] as int;
+    return 0;
   }
 
   static const String _feedCacheKey = 'cached_global_feed';

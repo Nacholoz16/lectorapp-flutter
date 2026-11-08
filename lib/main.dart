@@ -13,33 +13,35 @@ void main() async {
   // 1. Aseguramos que Flutter esté listo
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar servicio de temporizador en segundo plano
-  await TimerBackgroundService.initializeService();
+  // 2. Inicializaciones independientes EN PARALELO (antes eran secuenciales y el
+  //    tiempo de arranque era la suma de todas):
+  //    - servicio del cronómetro en segundo plano
+  //    - formato de fechas en español
+  //    - tema guardado
+  //    - token desde el almacenamiento cifrado
+  //    - alta tasa de refresco (solo Android; falla en silencio en otros)
+  await Future.wait([
+    TimerBackgroundService.initializeService(),
+    initializeDateFormatting('es', null),
+    ThemeService().loadTheme(),
+    ApiClient().loadToken(),
+    FlutterDisplayMode.setHighRefreshRate().catchError((_) {}),
+  ]);
 
-  // 2. Cargamos el formato de fechas en español
-  await initializeDateFormatting('es', null);
-  await ThemeService().loadTheme();
-
-
-  // 3. Intentar refresh rate alto (solo Android, falla silenciosamente en otros)
-  try {
-    await FlutterDisplayMode.setHighRefreshRate();
-  } catch (_) {}
-
-  // 4. AUTO-LOGIN: Cargamos el token en caché y verificamos su validez
-  await ApiClient().loadToken();
+  // 3. AUTO-LOGIN: verificamos localmente que el token no haya expirado
   final token = await ApiClient().getToken();
   final bool hasValidToken = AuthService.isJwtValid(token);
 
-  // Si el token expiró, limpiamos los datos guardados
+  // Token expirado: limpiar solo lo local. No se llama a /auth/logout porque un token
+  // expirado ya no sirve, y esperar a la red aquí retrasaría el arranque (o lo colgaría sin red).
   if (token != null && !hasValidToken) {
-    await AuthService().logout();
+    await ApiClient().clearSession();
   }
 
   final Widget initialScreen =
       hasValidToken ? const TabsScreen() : const LoginScreen();
 
-  // 5. Arrancamos la app
+  // 4. Arrancamos la app
   runApp(LectorApp(initialScreen: initialScreen));
 }
 
