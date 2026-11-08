@@ -1,24 +1,37 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; // Lo crearemos en el siguiente paso
+import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 
+/// Contenedor principal: 3 pestañas en un IndexedStack (conservan scroll y datos).
 class TabsScreen extends StatefulWidget {
   const TabsScreen({super.key});
+
+  static const int home = 0;
+  static const int search = 1;
+  static const int profile = 2;
+
+  /// Cambia de pestaña desde cualquier pantalla hija (p. ej. "Buscar un libro" en un
+  /// estado vacío). No hace nada si no hay un TabsScreen arriba.
+  static void select(BuildContext context, int index) =>
+      context.findAncestorStateOfType<_TabsScreenState>()?._select(index);
 
   @override
   State<TabsScreen> createState() => _TabsScreenState();
 }
 
 class _TabsScreenState extends State<TabsScreen> {
-  int _currentIndex = 0;
+  int _currentIndex = TabsScreen.home;
 
-  // Aquí irán tus otras pantallas cuando las migremos
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const SearchScreen(),
-    const ProfileScreen(), // Placeholder
+  final List<Widget> _screens = const [
+    HomeScreen(),
+    SearchScreen(),
+    ProfileScreen(),
   ];
+
+  void _select(int index) {
+    if (index != _currentIndex) setState(() => _currentIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,19 +42,26 @@ class _TabsScreenState extends State<TabsScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        selectedItemColor: Theme.of(context).primaryColor,
+        onTap: _select,
+        type: BottomNavigationBarType.fixed,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined), label: 'Inicio'),
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home_rounded),
+            label: 'Inicio',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.search_outlined), label: 'Buscar'),
+            icon: Icon(Icons.search_outlined),
+            activeIcon: Icon(Icons.search_rounded),
+            label: 'Buscar',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline), label: 'Perfil'),
+            icon: Icon(Icons.person_outline_rounded),
+            activeIcon: Icon(Icons.person_rounded),
+            label: 'Perfil',
+          ),
         ],
       ),
     );

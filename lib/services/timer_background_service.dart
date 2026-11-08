@@ -17,7 +17,7 @@ void onStart(ServiceInstance service) async {
   int seconds = 0;
   bool isRunning = false;
   bool isFinished = false;
-  String bookTitle = 'Sesión de Lectura';
+  String bookTitle = 'Sesión de lectura';
   Map<String, dynamic>? selectedLog;
   DateTime? startTime;
   int accumulatedSeconds = 0;
@@ -66,7 +66,7 @@ void onStart(ServiceInstance service) async {
 
   service.on('startTimer').listen((event) {
     if (event != null) {
-      bookTitle = event['bookTitle'] ?? 'Sesión de Lectura';
+      bookTitle = event['bookTitle'] ?? 'Sesión de lectura';
       selectedLog = event['selectedLog'];
       final initial = event['seconds'];
       if (initial != null) {
@@ -152,7 +152,7 @@ class TimerBackgroundService {
     // Crear canal de notificaciones (requerido en Android 8+)
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       kNotificationChannelId,
-      'Sesión de Lectura',
+      'Sesión de lectura',
       description: 'Cronómetro de lectura en segundo plano',
       importance: Importance.low,
       playSound: false,
@@ -172,7 +172,7 @@ class TimerBackgroundService {
         autoStart: false,
         isForegroundMode: true,
         notificationChannelId: kNotificationChannelId,
-        initialNotificationTitle: 'Sesión de Lectura',
+        initialNotificationTitle: 'Sesión de lectura',
         initialNotificationContent: 'Listo para iniciar…',
         foregroundServiceNotificationId: kNotificationId,
         foregroundServiceTypes: [AndroidForegroundType.dataSync],

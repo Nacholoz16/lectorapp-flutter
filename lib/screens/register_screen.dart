@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'tabs_screen.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../ui/feedback.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -47,8 +49,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final error = _validate(username, email, password);
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Theme.of(context).colorScheme.error));
+      showError(context, error, fallback: error);
       return;
     }
 
@@ -67,11 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Theme.of(context).colorScheme.error),
-        );
+        showError(context, e, fallback: 'No pudimos crear tu cuenta. Inténtalo de nuevo.');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -110,11 +107,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Crear Cuenta',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Lora',
-                    ),
+                'Crear cuenta',
+                style: GoogleFonts.lora(
+                  textStyle: Theme.of(context).textTheme.headlineMedium,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Text(

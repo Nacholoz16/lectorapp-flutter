@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/reading_service.dart';
 import '../book_cover.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'status_chip.dart';
 
 class BookStatsModal extends StatefulWidget {
   final Map<String, dynamic> readingLog;
@@ -46,7 +48,6 @@ class _BookStatsModalState extends State<BookStatsModal> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).primaryColor;
     final title = widget.readingLog['title'] ?? 'Sin título';
     final author = widget.readingLog['authors'] ?? widget.readingLog['author'] ?? 'Desconocido';
     final coverUrl = widget.readingLog['cover_url'] ?? widget.readingLog['cover_image'];
@@ -109,10 +110,9 @@ class _BookStatsModalState extends State<BookStatsModal> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: GoogleFonts.lora(textStyle: const TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Lora'),
+                            fontWeight: FontWeight.bold,)),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -120,21 +120,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
                       Text(author,
                           style: TextStyle(color: context.lector.textSecondary, fontSize: 13)),
                       const SizedBox(height: 6),
-                      Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: primaryColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          status.toString().toUpperCase(),
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: primaryColor),
-                        ),
-                      ),
+                      StatusChip(status: status),
                     ],
                   ),
                 ),
@@ -167,7 +153,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
                     child: _buildTile(
                       icon: Icons.timer_outlined,
                       color: const Color(0xFF66BB6A),
-                      label: 'Sesiones Totales',
+                      label: 'Sesiones',
                       value: '$totalSessions',
                     ),
                   ),
@@ -180,7 +166,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
                     child: _buildTile(
                       icon: Icons.speed_rounded,
                       color: const Color(0xFFAB47BC),
-                      label: 'Promedio Sesión',
+                      label: 'Promedio por sesión',
                       value: '$avgSession min',
                     ),
                   ),
@@ -231,7 +217,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 2),
           Text(label,
-              style: TextStyle(color: context.lector.textSecondary, fontSize: 11)),
+              style: TextStyle(color: context.lector.textSecondary, fontSize: 12)),
         ],
       ),
     );

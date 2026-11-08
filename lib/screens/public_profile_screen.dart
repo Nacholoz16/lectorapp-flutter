@@ -7,6 +7,10 @@ import '../models/reading_log.dart';
 import '../book_cover.dart';
 import 'book_detail_screen.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../widgets/status_chip.dart';
+import '../widgets/state_views.dart';
+import '../utils/json_utils.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final String username;
@@ -70,8 +74,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       // /users/:username ya incluye la primera página de la biblioteca (vacía si es privado):
       // no hace falta pedir /library?page=1 por separado.
       final profileData = await UserService().getProfile(widget.username);
-      final libraryData =
-          profileData['library'] is List ? profileData['library'] as List : const [];
+      final libraryData = profileData['library'] is List
+          ? profileData['library'] as List
+          : const [];
 
       if (mounted) {
         setState(() {
@@ -111,13 +116,18 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   }
 
   Future<void> _fetchMore() async {
-    if (_isFetchingMore || !_hasMore || _profile == null || !_profile!.isProfilePublic) return;
+    if (_isFetchingMore ||
+        !_hasMore ||
+        _profile == null ||
+        !_profile!.isProfilePublic) {
+      return;
+    }
     setState(() => _isFetchingMore = true);
 
     try {
       final nextPage = _page + 1;
-      final libraryData = await UserService().getUserLibrary(widget.username,
-          page: nextPage, limit: _limit);
+      final libraryData = await UserService()
+          .getUserLibrary(widget.username, page: nextPage, limit: _limit);
 
       final newLogs =
           libraryData.map((item) => ReadingLog.fromJson(item)).toList();
@@ -141,8 +151,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       }
     }
   }
-
-  Color _getStatusColor(String status) => context.lector.statusColor(status);
 
   @override
   Widget build(BuildContext context) {
@@ -187,17 +195,20 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock_rounded, size: 72, color: context.lector.iconInactive),
+              Icon(Icons.lock_rounded,
+                  size: 72, color: context.lector.iconInactive),
               const SizedBox(height: 20),
               Text(
                 'Perfil Privado de @${_profile!.username}',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
                 'Este usuario ha configurado su perfil como privado.',
-                style: TextStyle(color: context.lector.textSecondary, fontSize: 14),
+                style: TextStyle(
+                    color: context.lector.textSecondary, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -234,8 +245,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           Text(
             _profile!.username,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 26, fontWeight: FontWeight.w800, fontFamily: 'Lora'),
+            style: GoogleFonts.lora(
+                textStyle: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+            )),
           ),
           const SizedBox(height: 6),
           Padding(
@@ -263,46 +277,64 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedTab = 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _selectedTab == 0
-                              ? primaryColor.withValues(alpha: 0.15)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Biblioteca (${library.length})',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color:
-                                _selectedTab == 0 ? primaryColor : context.lector.textSecondary,
+                    child: Semantics(
+                      button: true,
+                      selected: _selectedTab == 0,
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedTab = 0),
+                        borderRadius: BorderRadius.circular(12),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedTab == 0
+                                  ? primaryColor.withValues(alpha: 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Biblioteca (${library.length})',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _selectedTab == 0
+                                    ? primaryColor
+                                    : context.lector.textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedTab = 1),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _selectedTab == 1
-                              ? primaryColor.withValues(alpha: 0.15)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Estadísticas',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color:
-                                _selectedTab == 1 ? primaryColor : context.lector.textSecondary,
+                    child: Semantics(
+                      button: true,
+                      selected: _selectedTab == 1,
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedTab = 1),
+                        borderRadius: BorderRadius.circular(12),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedTab == 1
+                                  ? primaryColor.withValues(alpha: 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Estadísticas',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _selectedTab == 1
+                                    ? primaryColor
+                                    : context.lector.textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -316,19 +348,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
 
           if (_selectedTab == 0) ...[
             if (library.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(40.0),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.auto_stories_rounded,
-                          size: 64, color: context.lector.textSecondary.withValues(alpha: 0.3)),
-                      const SizedBox(height: 16),
-                      Text('No hay lecturas públicas.',
-                          style: TextStyle(color: context.lector.textSecondary)),
-                    ],
-                  ),
-                ),
+              EmptyState(
+                icon: Icons.auto_stories_rounded,
+                title: 'Sin lecturas públicas',
+                message: '${_profile?.username ?? 'Esta persona'} todavía no ha compartido lo que lee.',
               )
             else ...[
               ...library.map((log) => _buildBookCard(log)),
@@ -423,11 +446,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                       Expanded(
                         child: Text(
                           log.title ?? '',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 17,
-                              fontFamily: 'Lora',
-                              height: 1.2),
+                          style: GoogleFonts.lora(
+                              textStyle: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 17,
+                                  height: 1.2)),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -447,23 +470,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(log.status)
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          log.status.toUpperCase(),
-                          style: TextStyle(
-                              color: _getStatusColor(log.status),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5),
-                        ),
-                      ),
+                      StatusChip(status: log.status),
                       const Spacer(),
                       if (log.rating != null && log.status != 'leyendo') ...[
                         Row(
@@ -509,7 +516,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               Text(
                 'Las estadísticas de este usuario son privadas.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: context.lector.textSecondary, fontSize: 15),
+                style: TextStyle(
+                    color: context.lector.textSecondary, fontSize: 15),
               ),
             ],
           ),
@@ -607,7 +615,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 child: _buildMetricCard(
                   icon: Icons.access_time_filled_rounded,
                   iconColor: const Color(0xFF4995FF),
-                  title: 'Tiempo Total',
+                  title: 'Tiempo leyendo',
                   value: timeStr,
                 ),
               ),
@@ -616,7 +624,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 child: _buildMetricCard(
                   icon: Icons.menu_book_rounded,
                   iconColor: const Color(0xFF66BB6A),
-                  title: 'Páginas Leídas',
+                  title: 'Páginas leídas',
                   value: '$totalPages pág.',
                 ),
               ),
@@ -630,7 +638,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   icon: Icons.check_circle_rounded,
                   iconColor: const Color(0xFFAB47BC),
                   title: 'Terminados',
-                  value: '${_stats?['finished_books'] ?? 0} libros',
+                  value: _booksLabel(asInt(_stats?['finished_books'])),
                 ),
               ),
               const SizedBox(width: 12),
@@ -638,7 +646,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 child: _buildMetricCard(
                   icon: Icons.favorite_rounded,
                   iconColor: context.lector.danger,
-                  title: 'Likes Recibidos',
+                  title: 'Me gusta recibidos',
                   value: '$totalLikes',
                 ),
               ),
@@ -651,7 +659,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 child: _buildMetricCard(
                   icon: Icons.star_rounded,
                   iconColor: context.lector.star,
-                  title: 'Promedio Stars',
+                  title: 'Calificación media',
                   value: '$avgRating',
                 ),
               ),
@@ -691,9 +699,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 2),
           Text(title,
-              style: TextStyle(color: context.lector.textSecondary, fontSize: 12)),
+              style:
+                  TextStyle(color: context.lector.textSecondary, fontSize: 12)),
         ],
       ),
     );
   }
+
+  /// "1 libro" / "3 libros".
+  String _booksLabel(int n) => n == 1 ? '1 libro' : '$n libros';
 }

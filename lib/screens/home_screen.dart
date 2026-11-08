@@ -6,6 +6,9 @@ import '../widgets/user_card.dart';
 import '../utils/json_utils.dart';
 import 'package:test_lectorapp/screens/book_detail_screen.dart';
 import 'package:test_lectorapp/screens/public_profile_screen.dart';
+import '../ui/feedback.dart';
+import '../widgets/state_views.dart';
+import 'tabs_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -118,21 +121,17 @@ class _HomeScreenState extends State<HomeScreen>
       }
     } catch (e) {
       if (mounted) {
+        // Si ya hay publicaciones (caché o carga anterior) se siguen mostrando y solo se
+        // avisa; antes el error reemplazaba el feed entero por un texto.
+        final hasContent = feed.isNotEmpty;
         setState(() {
           isLoading = false;
-          _errorMessage = e.toString();
+          _errorMessage = hasContent ? null : friendlyError(e);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar el feed: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            action: SnackBarAction(
-              label: 'Reintentar',
-              textColor: Theme.of(context).colorScheme.onError,
-              onPressed: loadFeed,
-            ),
-          ),
-        );
+        if (hasContent) {
+          showError(context, e,
+              fallback: 'No pudimos actualizar el feed.', onRetry: loadFeed);
+        }
       }
     }
   }
@@ -248,14 +247,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.build(context); // Requerido por AutomaticKeepAliveClientMixin
     return Scaffold(
       appBar: AppBar(
-        title: const Text('LectorApp',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none),
-            onPressed: () {},
-          ),
-        ],
+        title: const Text('LectorApp'),
       ),
       body: Stack(
         children: [
@@ -265,8 +257,22 @@ class _HomeScreenState extends State<HomeScreen>
             child: isLoading
                 ? _buildSkeleton()
                 : _errorMessage != null
-                    ? Center(child: Text(_errorMessage!))
-                    : ListView.separated(
+                    ? _scrollableState(ErrorState(
+                        message: _errorMessage!,
+                        onRetry: loadFeed,
+                      ))
+                    : feed.isEmpty
+                        ? _scrollableState(EmptyState(
+                            icon: Icons.auto_stories_rounded,
+                            title: 'Aún no hay lecturas compartidas',
+                            message:
+                                'Cuando alguien comparta lo que está leyendo, aparecerá aquí. ¿Empiezas tú?',
+                            actionLabel: 'Buscar un libro',
+                            actionIcon: Icons.search_rounded,
+                            onAction: () =>
+                                TabsScreen.select(context, TabsScreen.search),
+                          ))
+                        : ListView.separated(
                         controller: _scrollController,
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.symmetric(
@@ -311,6 +317,21 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
           ),
           if (_newPostsCount > 0) _buildNewPostsBanner(),
+        ],
+      ),
+    );
+  }
+
+  /// Estados vacío/error dentro de un scroll, para que "tirar para refrescar" siga funcionando.
+  Widget _scrollableState(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: child,
+          ),
         ],
       ),
     );

@@ -13,6 +13,12 @@ import '../widgets/book_stats_modal.dart';
 import '../services/theme_service.dart';
 import '../book_cover.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../widgets/status_chip.dart';
+import '../ui/feedback.dart';
+import '../widgets/state_views.dart';
+import 'tabs_screen.dart';
+import '../utils/json_utils.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -135,12 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) unawaited(_loadStats());
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo guardar la meta: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        showError(context, e, fallback: 'No pudimos guardar tu meta.');
       }
     }
   }
@@ -171,8 +172,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         // /users/:username ya incluye la primera página de la biblioteca:
         // no hace falta pedir /library?page=1 por separado.
         final profileData = await UserService().getProfile(username);
-        final libraryData =
-            profileData['library'] is List ? profileData['library'] as List : const [];
+        final libraryData = profileData['library'] is List
+            ? profileData['library'] as List
+            : const [];
 
         if (mounted) {
           setState(() {
@@ -187,28 +189,15 @@ class _ProfileScreenState extends State<ProfileScreen>
       } else {
         if (mounted) {
           setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('No se pudo obtener los datos de la sesión'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
+          showError(context, 'session',
+              fallback: 'No pudimos leer tu sesión. Vuelve a iniciar sesión.');
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar el perfil: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            action: SnackBarAction(
-              label: 'Reintentar',
-              textColor: Theme.of(context).colorScheme.onError,
-              onPressed: _loadMyProfile,
-            ),
-          ),
-        );
+        showError(context, e,
+            fallback: 'No pudimos cargar tu perfil.', onRetry: _loadMyProfile);
       }
     }
   }
@@ -219,8 +208,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     try {
       final nextPage = _page + 1;
-      final libraryData = await UserService().getUserLibrary(_profile!.username,
-          page: nextPage, limit: _limit);
+      final libraryData = await UserService()
+          .getUserLibrary(_profile!.username, page: nextPage, limit: _limit);
 
       final newLogs =
           libraryData.map((item) => ReadingLog.fromJson(item)).toList();
@@ -244,8 +233,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
-  Color _getStatusColor(String status) => context.lector.statusColor(status);
 
   Future<void> _onLogout() async {
     await AuthService().logout();
@@ -274,8 +261,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SwitchListTile(
-                    title: const Text('Perfil Público'),
-                    subtitle: const Text('Permite que otros usuarios vean tu perfil y biblioteca'),
+                    title: const Text('Perfil público'),
+                    subtitle: const Text(
+                        'Permite que otros usuarios vean tu perfil y biblioteca'),
                     value: isProfilePublic,
                     activeTrackColor: Theme.of(context).primaryColor,
                     onChanged: (val) {
@@ -285,7 +273,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const Divider(),
                   SwitchListTile(
                     title: const Text('Estadísticas Públicas'),
-                    subtitle: const Text('Permite que otros usuarios vean tus estadísticas de lectura'),
+                    subtitle: const Text(
+                        'Permite que otros usuarios vean tus estadísticas de lectura'),
                     value: areStatsPublic,
                     activeTrackColor: Theme.of(context).primaryColor,
                     onChanged: (val) {
@@ -369,7 +358,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mi Biblioteca'),
+        title: const Text('Mi biblioteca'),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings_outlined),
@@ -443,8 +432,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border:
-                    Border.all(color: primaryColor.withValues(alpha: 0.3), width: 3),
+                border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.3), width: 3),
               ),
               child: CircleAvatar(
                 radius: 54,
@@ -458,8 +447,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           Text(
             _profile!.username,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 26, fontWeight: FontWeight.w800, fontFamily: 'Lora'),
+            style: GoogleFonts.lora(
+                textStyle: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+            )),
           ),
           const SizedBox(height: 6),
           Padding(
@@ -500,7 +492,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const SizedBox(width: 8),
                   Text(
                     _profile!.isProfilePublic
-                        ? 'Perfil Público'
+                        ? 'Perfil público'
                         : 'Perfil Privado',
                     style: TextStyle(
                       color: _profile!.isProfilePublic
@@ -528,44 +520,64 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedTab = 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _selectedTab == 0
-                              ? primaryColor.withValues(alpha: 0.15)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Biblioteca (${library.length})',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _selectedTab == 0 ? primaryColor : context.lector.textSecondary,
+                    child: Semantics(
+                      button: true,
+                      selected: _selectedTab == 0,
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedTab = 0),
+                        borderRadius: BorderRadius.circular(12),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedTab == 0
+                                  ? primaryColor.withValues(alpha: 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Biblioteca (${library.length})',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _selectedTab == 0
+                                    ? primaryColor
+                                    : context.lector.textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedTab = 1),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _selectedTab == 1
-                              ? primaryColor.withValues(alpha: 0.15)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Estadísticas',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _selectedTab == 1 ? primaryColor : context.lector.textSecondary,
+                    child: Semantics(
+                      button: true,
+                      selected: _selectedTab == 1,
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedTab = 1),
+                        borderRadius: BorderRadius.circular(12),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _selectedTab == 1
+                                  ? primaryColor.withValues(alpha: 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Estadísticas',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _selectedTab == 1
+                                    ? primaryColor
+                                    : context.lector.textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -579,19 +591,14 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           if (_selectedTab == 0) ...[
             if (library.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(40.0),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.auto_stories_rounded,
-                          size: 64, color: context.lector.textSecondary.withValues(alpha: 0.3)),
-                      const SizedBox(height: 16),
-                      Text('Aún no has registrado lecturas.',
-                          style: TextStyle(color: context.lector.textSecondary)),
-                    ],
-                  ),
-                ),
+              EmptyState(
+                icon: Icons.auto_stories_rounded,
+                title: 'Tu biblioteca está esperando su primer libro',
+                message:
+                    'Busca lo que estás leyendo y empieza a guardar lo que piensas.',
+                actionLabel: 'Buscar libros',
+                actionIcon: Icons.search_rounded,
+                onAction: () => TabsScreen.select(context, TabsScreen.search),
               )
             else ...[
               ...library.map((log) => _buildBookCard(log)),
@@ -689,42 +696,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                 children: [
                   Text(
                     log.title ?? '',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
-                        fontFamily: 'Lora',
-                        height: 1.2),
+                    style: GoogleFonts.lora(
+                        textStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            height: 1.2)),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(log.authors ?? '',
-                      style:
-                          TextStyle(fontSize: 13, color: context.lector.textSecondary)),
+                      style: TextStyle(
+                          fontSize: 13, color: context.lector.textSecondary)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(log.status)
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          log.status.toUpperCase(),
-                          style: TextStyle(
-                              color: _getStatusColor(log.status),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5),
-                        ),
-                      ),
+                      StatusChip(status: log.status),
                       const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.bar_chart_rounded, size: 20),
-                        tooltip: 'Ver Estadísticas',
+                        tooltip: 'Ver estadísticas de este libro',
                         color: primaryColor,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -733,7 +724,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
-                            builder: (context) => BookStatsModal(readingLog: logMap),
+                            builder: (context) =>
+                                BookStatsModal(readingLog: logMap),
                           );
                         },
                       ),
@@ -749,7 +741,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
-                            builder: (context) => EditBookModal(readingLog: logMap),
+                            builder: (context) =>
+                                EditBookModal(readingLog: logMap),
                           );
                         },
                       ),
@@ -783,13 +776,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ? '${log.currentPage} / ${log.pageCount} pág.'
                               : '${log.currentPage} pág.',
                           style: TextStyle(
-                              fontSize: 11, color: context.lector.textSecondary),
+                              fontSize: 12,
+                              color: context.lector.textSecondary),
                         ),
                         if (log.pageCount != null)
                           Text(
                             '$percentage%',
                             style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: primaryColor),
                           ),
@@ -833,7 +827,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     final finishedThisYear = _stats?['finished_books_this_year'] ?? 0;
     final targetBooks = _stats?['target_books_this_year'] ?? 10;
     final avgRating = _stats?['avg_rating'] ?? '0.0';
-    final double goalProgress = (targetBooks > 0 ? finishedThisYear / targetBooks : 0.0).clamp(0.0, 1.0);
+    final double goalProgress =
+        (targetBooks > 0 ? finishedThisYear / targetBooks : 0.0)
+            .clamp(0.0, 1.0);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -845,11 +841,12 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: ElevatedButton.icon(
               onPressed: _openTimerModal,
               icon: const Icon(Icons.timer_outlined, size: 22),
-              label: const Text('Iniciar Sesión de Lectura',
+              label: const Text('Empezar a leer',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
               ),
             ),
           ),
@@ -895,7 +892,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.emoji_events_outlined, size: 20, color: primaryColor),
+                          Icon(Icons.emoji_events_outlined,
+                              size: 20, color: primaryColor),
                           const SizedBox(width: 6),
                           Text(
                             'Reto ${_stats?['year'] ?? 2026}',
@@ -932,7 +930,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: _buildMetricCard(
                   icon: Icons.access_time_filled_rounded,
                   iconColor: const Color(0xFF4995FF),
-                  title: 'Tiempo Total',
+                  title: 'Tiempo leyendo',
                   value: timeStr,
                 ),
               ),
@@ -941,7 +939,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: _buildMetricCard(
                   icon: Icons.menu_book_rounded,
                   iconColor: const Color(0xFF66BB6A),
-                  title: 'Páginas Leídas',
+                  title: 'Páginas leídas',
                   value: '$totalPages pág.',
                 ),
               ),
@@ -955,7 +953,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   icon: Icons.check_circle_rounded,
                   iconColor: const Color(0xFFAB47BC),
                   title: 'Terminados',
-                  value: '${_stats?['finished_books'] ?? 0} libros',
+                  value: _booksLabel(asInt(_stats?['finished_books'])),
                 ),
               ),
               const SizedBox(width: 12),
@@ -963,7 +961,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: _buildMetricCard(
                   icon: Icons.favorite_rounded,
                   iconColor: context.lector.danger,
-                  title: 'Likes Recibidos',
+                  title: 'Me gusta recibidos',
                   value: '${_stats?['total_likes'] ?? 0}',
                 ),
               ),
@@ -976,7 +974,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: _buildMetricCard(
                   icon: Icons.star_rounded,
                   iconColor: context.lector.star,
-                  title: 'Promedio Stars',
+                  title: 'Calificación media',
                   value: '$avgRating',
                 ),
               ),
@@ -1016,9 +1014,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 2),
           Text(title,
-              style: TextStyle(color: context.lector.textSecondary, fontSize: 12)),
+              style:
+                  TextStyle(color: context.lector.textSecondary, fontSize: 12)),
         ],
       ),
     );
   }
+
+  /// "1 libro" / "3 libros".
+  String _booksLabel(int n) => n == 1 ? '1 libro' : '$n libros';
 }

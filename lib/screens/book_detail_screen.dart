@@ -8,6 +8,9 @@ import '../services/book_service.dart';
 import '../widgets/log_book_modal.dart';
 import 'public_profile_screen.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../ui/feedback.dart';
+import '../widgets/state_views.dart';
 
 class BookDetailScreen extends StatefulWidget {
   final Map<String, dynamic> book;
@@ -48,12 +51,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingReviews = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar reseñas: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        showError(context, e,
+            fallback: 'No pudimos cargar las reseñas.', onRetry: _loadReviews);
       }
     }
   }
@@ -138,21 +137,19 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         Text(
                           widget.book['title'] ?? 'Sin título',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: GoogleFonts.lora(textStyle: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w800,
                             height: 1.2,
-                            fontFamily: 'Lora',
                             color: Theme.of(context).textTheme.bodyLarge?.color,
-                          ),
+                          )),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           (widget.book['author'] ??
                                   widget.book['authors'] ??
                                   '')
-                              .toString()
-                              .toUpperCase(),
+                              .toString(),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,
@@ -196,12 +193,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
 
                         Row(
                           children: [
-                            const Text(
+                            Text(
                               'Reseñas',
-                              style: TextStyle(
+                              style: GoogleFonts.lora(textStyle: const TextStyle(
                                   fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Lora'),
+                                  fontWeight: FontWeight.bold,)),
                             ),
                             const SizedBox(width: 12),
                             Container(
@@ -233,20 +229,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                               padding: EdgeInsets.all(40.0),
                               child: CircularProgressIndicator())))
                 else if (_reviews.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40.0),
-                        child: Column(
-                          children: [
-                            Icon(Icons.chat_bubble_outline_rounded,
-                                size: 48, color: context.lector.textSecondary.withValues(alpha: 0.3)),
-                            const SizedBox(height: 16),
-                            Text('Sé el primero en opinar sobre esta obra.',
-                                style: TextStyle(color: context.lector.textSecondary)),
-                          ],
-                        ),
-                      ),
+                  const SliverToBoxAdapter(
+                    child: EmptyState(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: 'Aún nadie ha compartido lo que piensa',
+                      message: 'Si lo lees, puedes ser la primera voz sobre este libro.',
                     ),
                   )
                 else
@@ -290,6 +277,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       (isDark ? Colors.black : Colors.white).withValues(alpha: 0.2),
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back_rounded),
+                    tooltip: 'Volver',
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -350,10 +338,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
               const SizedBox(height: 12),
               Text(label,
                   style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: context.lector.textSecondary,
-                      letterSpacing: 1.5)),
+                      letterSpacing: 0.3)),
               const SizedBox(height: 4),
               Text(value,
                   style: const TextStyle(

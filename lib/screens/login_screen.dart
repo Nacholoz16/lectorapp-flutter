@@ -4,6 +4,8 @@ import '../services/auth_service.dart';
 import 'tabs_screen.dart'; // A donde iremos tras loguearnos
 import 'register_screen.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../ui/feedback.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -36,13 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        showError(context, e, fallback: 'No pudimos iniciar sesión. Inténtalo de nuevo.');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -82,11 +78,10 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 24),
               Text(
                 'LectorApp',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontFamily:
-                          'Lora', // Forzamos Lora para el título principal
-                    ),
+                style: GoogleFonts.lora(
+                  textStyle: Theme.of(context).textTheme.headlineMedium,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Text(

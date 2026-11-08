@@ -100,6 +100,8 @@ test_lectorapp/
 │   │   └── book_detail_screen.dart   # Vista detallada de un libro con fondo blur inmersivo y reseñas
 │   └── widgets/
 │       ├── user_card.dart            # Tarjeta versátil para el feed ('feed') o lista de reseñas ('review')
+│       ├── status_chip.dart          # StatusChip + statusLabel ('Leyendo'/'Terminado'/'Lo dejé') + ícono
+│       ├── state_views.dart          # EmptyState / ErrorState (estados vacíos y de error con acción)
 │       ├── reading_log_sheet.dart    # Formulario único añadir/editar lectura: borrador automático, aviso al descartar, validación
 │       ├── star_rating_input.dart    # Estrellas 0–5 accesibles (un control ajustable para TalkBack)
 │       ├── log_book_modal.dart       # Envoltorio de ReadingLogSheet (añadir) → {'saved': true}
@@ -248,7 +250,7 @@ Todas las respuestas de error tienen la forma `{ "error": string, "code": string
 2. **Tipografía Dual:**
    - **Títulos y encabezados literarios:** Fuente `Lora` (Serif, elegante, `FontWeight.bold` o `w800`).
    - **Cuerpo de texto y controles:** Fuente `Nunito` (Sans-serif redondeada de lectura suave).
-   - **Cómo se aplica:** `ThemeService` carga `GoogleFonts.nunitoTextTheme()` y `GoogleFonts.lora(...)` (en `appBarTheme` y el getter `ThemeService.titleStyle`). Varias pantallas usan `fontFamily: 'Lora'` a mano y **eso no aplica Lora** (google_fonts registra la familia con otro nombre, p. ej. `Lora_700`): esos títulos se ven en la fuente por defecto. Usar siempre `GoogleFonts.lora(...)` o `ThemeService.titleStyle` (pendiente migrar los ~11 usos).
+   - **Cómo se aplica:** `ThemeService` carga `GoogleFonts.nunitoTextTheme()` y `GoogleFonts.lora(...)` (en `appBarTheme` y el getter `ThemeService.titleStyle`). **No usar `fontFamily: 'Lora'`**: no aplica la fuente (google_fonts la registra con otro nombre, p. ej. `Lora_700`). Usar siempre `GoogleFonts.lora(...)` o `ThemeService.titleStyle`.
 3. **Las 4 Paletas de Tema (`ThemeService`, construidas por `_buildTheme` a partir de `LectorColors`):**
    - Cada tema tiene un **pastel (`accent`)** para fondos/chips/decoración y un **`ink`** legible para texto, íconos activos y botones. `primaryColor` y `colorScheme.primary` = ink.
    - `light` (**Crema & Salvia** - Default): accent `#8BA89F`, ink `#4F7A70`, fondo `#FDFBF7`, texto `#3D4042`, secundario `#6B6F72`.

@@ -11,9 +11,14 @@ import '../services/api_client.dart';
 /// internas: solo los mensajes de [ApiException], que ya están redactados para el usuario.
 String friendlyError(Object error, {String? fallback}) {
   if (error is ApiException) {
+    // La API ya responde mensajes redactados para el usuario ("El email ya está registrado",
+    // "Ya tienes este libro registrado."...). Solo si llega el genérico "Error NNN" (sin cuerpo
+    // JSON) se traduce por código.
+    final generic = error.message.isEmpty || error.message.startsWith('Error ');
+    if (!generic) return error.message;
     switch (error.statusCode) {
       case 409:
-        return 'Ya tienes este libro en tu biblioteca.';
+        return 'Eso ya existe.';
       case 429:
         return 'Vas muy rápido. Espera un momento e inténtalo de nuevo.';
       case 403:
@@ -21,7 +26,6 @@ String friendlyError(Object error, {String? fallback}) {
       case 404:
         return 'No encontramos lo que buscabas. Puede que ya no exista.';
     }
-    if (error.message.isNotEmpty) return error.message;
   }
   return fallback ?? 'Algo salió mal. Inténtalo de nuevo.';
 }

@@ -6,6 +6,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/reading_service.dart';
 import '../services/timer_background_service.dart';
 import '../theme/lector_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../ui/feedback.dart';
 
 class ReadingTimerModal extends StatefulWidget {
   final List<dynamic> readingLogs; // Lista de libros en estado 'leyendo'
@@ -90,7 +92,7 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
   }
 
   void _startTimer() async {
-    final title = _selectedLog?['title'] ?? 'Sesión de Lectura';
+    final title = _selectedLog?['title'] ?? 'Sesión de lectura';
     await TimerBackgroundService.start(
       bookTitle: title,
       selectedLog: _selectedLog,
@@ -153,12 +155,8 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar la sesión: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        showError(context, e,
+            fallback: 'No pudimos guardar la sesión. Tu tiempo sigue aquí: inténtalo de nuevo.');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -191,18 +189,17 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
               ),
             ),
             const SizedBox(height: 16),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.timer_outlined, size: 24),
-                SizedBox(width: 8),
+                const Icon(Icons.timer_outlined, size: 24),
+                const SizedBox(width: 8),
                 Text(
-                  'Sesión de Lectura',
-                  style: TextStyle(
+                  'Sesión de lectura',
+                  style: GoogleFonts.lora(textStyle: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    fontFamily: 'Lora',
-                  ),
+                  )),
                 ),
               ],
             ),

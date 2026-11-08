@@ -5,6 +5,8 @@ import '../services/book_service.dart';
 import 'book_detail_screen.dart';
 import '../widgets/log_book_modal.dart';
 import '../theme/lector_colors.dart';
+import '../ui/feedback.dart';
+import '../widgets/state_views.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -60,12 +62,7 @@ class _SearchScreenState extends State<SearchScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error en la búsqueda: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+        showError(context, e, fallback: 'No pudimos buscar ahora. Inténtalo de nuevo.');
       }
     }
   }
@@ -125,7 +122,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Buscar Libros'),
+        title: const Text('Buscar libros'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -140,6 +137,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 suffixIcon: _searchTerm.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 20),
+                        tooltip: 'Borrar búsqueda',
                         onPressed: () {
                           _searchController.clear();
                           _onSearchChanged('');
@@ -213,6 +211,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               trailing: IconButton(
                 icon: Icon(Icons.more_vert, color: context.lector.textSecondary),
+                tooltip: 'Opciones de «${book['title'] ?? 'este libro'}»',
                 onPressed: () => _presentOptions(context, book),
               ),
               onTap: () {
@@ -230,20 +229,19 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // Corregido: >= 3 (la búsqueda se dispara con 3 caracteres)
     if (_searchTerm.length >= 3 && _results.isEmpty) {
-      return const Center(child: Text('No encontramos libros con ese nombre.'));
+      return EmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'No encontramos «$_searchTerm»',
+        message: 'Prueba con el autor, con menos palabras o revisa cómo está escrito.',
+      );
     }
 
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.search,
-              size: 64, color: Theme.of(context).primaryColor.withValues(alpha: 0.4)),
-          const SizedBox(height: 16),
-          Text('Busca para agregar a tu lista.',
-              style: TextStyle(color: context.lector.textSecondary)),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.menu_book_rounded,
+      title: '¿Qué estás leyendo?',
+      message: _searchTerm.isEmpty
+          ? 'Busca por título, autor o ISBN y añádelo a tu biblioteca.'
+          : 'Escribe al menos 3 letras para buscar.',
     );
   }
 }

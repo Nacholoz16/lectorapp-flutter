@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'widgets/book_loader.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class BookCover extends StatelessWidget {
   final String? src;
@@ -67,12 +68,11 @@ class BookCover extends StatelessWidget {
         child: Text(
           title.isNotEmpty ? title : 'Sin Portada',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: GoogleFonts.lora(textStyle: TextStyle(
             color: Theme.of(context).colorScheme.onPrimary,
             fontWeight: FontWeight.bold,
-            fontFamily: 'Lora',
             fontSize: 12,
-          ),
+          )),
         ),
       ),
     );
