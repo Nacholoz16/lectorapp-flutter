@@ -34,7 +34,7 @@ Este archivo contiene el contexto técnico, la arquitectura, las librerías y la
 | :------------------------------ | :---------- | :------------------------------------------------------------------------------------------------------------------------------------- |
 | `http`                        | `^1.1.0`  | Peticiones REST hacia la API mediante el wrapper centralizado `ApiClient` (un único `http.Client` reutilizado, keep-alive).          |
 | `flutter_secure_storage`      | `^10.3.1` | Almacenamiento cifrado del JWT (`auth-token`).                                                                                       |
-| `shared_preferences`          | `^2.2.2`  | Persistencia ligera: datos de usuario (`user-data`: solo `id`, `username`, `avatar`), tema activo (`app_theme`) y caché offline del feed (`cached_global_feed`). |
+| `shared_preferences`          | `^2.2.2`  | Persistencia ligera: datos de usuario (`user-data`: solo `id`, `username`, `avatar`), tema activo (`app_theme`), vista del feed (`feed_layout`), borradores de lecturas (`reading_draft_*`) y caché offline del feed (`cached_global_feed`). |
 | `cached_network_image`        | `^3.3.1`  | Caché en disco/memoria y pre-decodificación (`precacheImage`) de portadas de libros y avatares.                                    |
 | `flutter_background_service`  | `^5.0.1`  | Ejecución del cronómetro de lectura en un *isolate* separado en segundo plano (`TimerBackgroundService`).                        |
 | `flutter_local_notifications` | `^17.1.2` | Canal de notificaciones en Android (`reading_timer_channel`) para el servicio en primer plano del temporizador.                      |
@@ -83,6 +83,7 @@ test_lectorapp/
 │   │   ├── book_service.dart         # Búsqueda de libros y feed de reseñas por libro (NO es singleton)
 │   │   ├── reading_service.dart      # Singleton: feed por cursor, new-count, caché, CRUD logs, likes, sesiones, stats
 │   │   ├── user_service.dart         # Singleton: perfil, biblioteca paginada, stats, meta anual, privacidad
+│   │   ├── preferences_service.dart # Preferencias de UI locales: vista del feed (FeedLayout cards/compact)
 │   │   ├── theme_service.dart        # Singleton de temas con ValueNotifier<ThemeData> y 4 paletas pastel
 │   │   └── timer_background_service.dart # Isolate y controlador del cronómetro en segundo plano
 │   ├── ui/
@@ -92,14 +93,16 @@ test_lectorapp/
 │   ├── screens/
 │   │   ├── login_screen.dart         # Inicio de sesión (acepta email o username)
 │   │   ├── register_screen.dart      # Registro con validación local (mismas reglas que la API)
-│   │   ├── tabs_screen.dart          # Contenedor principal con IndexedStack y BottomNavigationBar (3 tabs)
-│   │   ├── home_screen.dart          # Tab 0: Feed global, caché instantánea, pre-caching de imágenes, cursor
-│   │   ├── search_screen.dart        # Tab 1: Buscador con debounce (300ms, mín. 3 caracteres)
-│   │   ├── profile_screen.dart       # Tab 2: Mi Biblioteca, Estadísticas, Reto Anual, Timer, Ajustes
+│   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar: Inicio · Biblioteca · Perfil (TabsScreen.select)
+│   │   ├── home_screen.dart          # Tab 0: saludo plegable, barra de búsqueda, "Sigues leyendo" y feed por cursor
+│   │   ├── library_screen.dart       # Tab 1: Mi biblioteca completa, filtros por estado, acceso al cronómetro
+│   │   ├── profile_screen.dart       # Tab 2: perfil, reto anual y estadísticas; tuerca = privacidad, apariencia, vista del feed
+│   │   ├── search_screen.dart        # Pantalla apilada (openSearch) desde la barra de Inicio; debounce 300ms, mín. 3 caracteres
 │   │   ├── public_profile_screen.dart# Perfil de otros usuarios (respeta candados de privacidad)
 │   │   └── book_detail_screen.dart   # Vista detallada de un libro con fondo blur inmersivo y reseñas
 │   └── widgets/
-│       ├── user_card.dart            # Tarjeta versátil para el feed ('feed') o lista de reseñas ('review')
+│       ├── user_card.dart            # Lectura en el feed (vista tarjetas o compacta) o reseña de un libro ('review')
+│       ├── library_book_tile.dart    # Fila de libro de Mi biblioteca (editar / estadísticas)
 │       ├── status_chip.dart          # StatusChip + statusLabel ('Leyendo'/'Terminado'/'Lo dejé') + ícono
 │       ├── state_views.dart          # EmptyState / ErrorState (estados vacíos y de error con acción)
 │       ├── reading_log_sheet.dart    # Formulario único añadir/editar lectura: borrador automático, aviso al descartar, validación
@@ -120,7 +123,7 @@ test_lectorapp/
 
 ### 4.1 Gestión de Estado y Navegación
 
-- **Estado Local + Singletons:** El proyecto no utiliza librerías externas pesadas de gestión de estado (como Bloc o Riverpod). En su lugar, emplea `StatefulWidget` para el estado de las vistas, `AutomaticKeepAliveClientMixin` en las pestañas principales (`HomeScreen`, `ProfileScreen`) dentro de un `IndexedStack` para preservar el scroll y los datos en memoria, y servicios **Singleton** (`ApiClient`, `AuthService`, `ReadingService`, `UserService`, `ThemeService`).
+- **Estado Local + Singletons:** El proyecto no utiliza librerías externas pesadas de gestión de estado (como Bloc o Riverpod). En su lugar, emplea `StatefulWidget` para el estado de las vistas, `AutomaticKeepAliveClientMixin` en las pestañas principales (`HomeScreen`, `LibraryScreen`, `ProfileScreen`) dentro de un `IndexedStack` para preservar el scroll y los datos en memoria, y servicios **Singleton** (`ApiClient`, `AuthService`, `ReadingService`, `UserService`, `ThemeService`, `PreferencesService`).
 - **Reactividad del Tema:** `ThemeService` expone un `ValueNotifier<ThemeData> currentTheme` escuchado en la raíz (`LectorApp` en `main.dart`) mediante `ValueListenableBuilder`.
 - **Navegación Global en Errores 401:** `Config.navigatorKey` (`GlobalKey<NavigatorState>`) está inyectada en `MaterialApp`. Si una petición de `ApiClient` devuelve `401`, el cliente ejecuta `clearSession()` (token, `user-data` y `cached_global_feed`) y redirige a `LoginScreen` limpiando el stack. Un flag evita que varias peticiones con 401 simultáneas apilen varias pantallas de login.
 

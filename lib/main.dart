@@ -5,6 +5,7 @@ import 'screens/tabs_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
 import 'services/display_mode_service.dart';
+import 'services/preferences_service.dart';
 import 'services/theme_service.dart';
 import 'services/timer_background_service.dart';
 import 'config.dart';
@@ -23,6 +24,7 @@ void main() async {
     TimerBackgroundService.initializeService(),
     initializeDateFormatting('es', null),
     ThemeService().loadTheme(),
+    PreferencesService().load(),
     ApiClient().loadToken(),
   ]);
 

@@ -8,6 +8,14 @@ import 'package:test_lectorapp/screens/book_detail_screen.dart';
 import 'package:test_lectorapp/screens/public_profile_screen.dart';
 import '../ui/feedback.dart';
 import '../widgets/state_views.dart';
+import 'package:intl/intl.dart';
+import '../book_cover.dart';
+import '../services/auth_service.dart';
+import '../services/preferences_service.dart';
+import '../services/theme_service.dart';
+import '../theme/lector_colors.dart';
+import '../widgets/edit_book_modal.dart';
+import 'search_screen.dart';
 import 'tabs_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -38,7 +46,10 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    ReadingService().libraryChanges.addListener(_onLibraryChanged);
     _initFeed();
+    unawaited(_loadUser());
+    unawaited(_loadContinueReading());
   }
 
   Future<void> _initFeed() async {
@@ -80,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    ReadingService().libraryChanges.removeListener(_onLibraryChanged);
     _scrollController.dispose();
     super.dispose();
   }
@@ -242,79 +254,91 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  // ─── Cabecera: saludo, búsqueda y "Sigues leyendo" ─────────────────────────────────────
+
+  String? _username;
+  String? _avatarUrl;
+  Map<String, dynamic>? _continueReading;
+
+  Future<void> _loadUser() async {
+    final user = await AuthService().getCurrentUser();
+    if (!mounted || user == null) return;
+    final username = user['username']?.toString();
+    // La sesión no siempre trae avatar: mismo respaldo DiceBear que el resto de la app.
+    var avatar = (user['avatar'] ?? user['avatar_url'])?.toString();
+    if ((avatar == null || avatar.isEmpty) && username != null) {
+      avatar = 'https://api.dicebear.com/7.x/bottts/png?seed=$username';
+    }
+    if (avatar != null && avatar.contains('/svg')) avatar = avatar.replaceAll('/svg', '/png');
+    setState(() {
+      _username = username;
+      _avatarUrl = avatar;
+    });
+  }
+
+  /// El libro que el usuario está leyendo (el más reciente), para retomarlo con un toque.
+  Future<void> _loadContinueReading() async {
+    try {
+      final library = await ReadingService().getMyLibrary(page: 1, limit: 50);
+      final reading = library
+          .whereType<Map<String, dynamic>>()
+          .where((l) => l['status'] == 'leyendo')
+          .toList();
+      if (mounted) setState(() => _continueReading = reading.isEmpty ? null : reading.first);
+    } catch (_) {
+      // Sin red: simplemente no se muestra la tarjeta.
+    }
+  }
+
+  void _onLibraryChanged() => unawaited(_loadContinueReading());
+
+  Future<void> _refreshAll() => Future.wait([loadFeed(), _loadContinueReading()]);
+
+  static String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 6) return 'Buenas noches';
+    if (h < 13) return 'Buenos días';
+    if (h < 20) return 'Buenas tardes';
+    return 'Buenas noches';
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Requerido por AutomaticKeepAliveClientMixin
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('LectorApp'),
-      ),
       body: Stack(
         children: [
           RefreshIndicator(
-            onRefresh: loadFeed,
-            color: Theme.of(context).primaryColor,
-            child: isLoading
-                ? _buildSkeleton()
-                : _errorMessage != null
-                    ? _scrollableState(ErrorState(
-                        message: _errorMessage!,
-                        onRetry: loadFeed,
-                      ))
-                    : feed.isEmpty
-                        ? _scrollableState(EmptyState(
-                            icon: Icons.auto_stories_rounded,
-                            title: 'Aún no hay lecturas compartidas',
-                            message:
-                                'Cuando alguien comparta lo que está leyendo, aparecerá aquí. ¿Empiezas tú?',
-                            actionLabel: 'Buscar un libro',
-                            actionIcon: Icons.search_rounded,
-                            onAction: () =>
-                                TabsScreen.select(context, TabsScreen.search),
-                          ))
-                        : ListView.separated(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 24),
-                        itemCount: feed.length + (_hasMore ? 1 : 0),
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          if (index == feed.length) {
-                            return const Center(
-                                child: Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: CircularProgressIndicator(),
-                            ));
-                          }
-                          return UserCard(
-                            item: feed[index],
-                            mode: 'feed',
-                            onLikeClick: () => _handleToggleLike(index),
-                            onUserClick: () {
-                              final username = feed[index]['username'];
-                              if (username != null && username.toString().isNotEmpty) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => PublicProfileScreen(username: username),
-                                  ),
-                                );
-                              }
-                            },
-                            onBookClick: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      BookDetailScreen(book: feed[index]),
-                                ),
-                              );
-                            },
-                          );
-                        },
+            onRefresh: _refreshAll,
+            edgeOffset: MediaQuery.paddingOf(context).top + 56,
+            child: ValueListenableBuilder<FeedLayout>(
+              valueListenable: PreferencesService().feedLayout,
+              builder: (context, layout, _) => CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  _buildHeader(),
+                  SliverToBoxAdapter(child: _buildSearchBar()),
+                  if (_continueReading != null)
+                    SliverToBoxAdapter(child: _buildContinueReading(_continueReading!)),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          'Lo que lee la comunidad',
+                          style: ThemeService.titleStyle
+                              .copyWith(fontSize: 18, color: context.lector.textPrimary),
+                        ),
                       ),
+                    ),
+                  ),
+                  ..._buildFeedSlivers(layout),
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                ],
+              ),
+            ),
           ),
           if (_newPostsCount > 0) _buildNewPostsBanner(),
         ],
@@ -322,24 +346,328 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  /// Estados vacío/error dentro de un scroll, para que "tirar para refrescar" siga funcionando.
-  Widget _scrollableState(Widget child) {
-    return LayoutBuilder(
-      builder: (context, constraints) => ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: child,
+  /// Cabecera grande con saludo que, al hacer scroll, se reduce a "LectorApp" + avatar.
+  Widget _buildHeader() {
+    const toolbar = 56.0;
+    const expanded = 136.0;
+    final c = context.lector;
+    final today = DateFormat("EEEE d 'de' MMMM", 'es').format(DateTime.now());
+
+    return SliverAppBar(
+      pinned: true,
+      automaticallyImplyLeading: false,
+      toolbarHeight: toolbar,
+      expandedHeight: expanded,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      surfaceTintColor: Colors.transparent,
+      flexibleSpace: LayoutBuilder(builder: (context, constraints) {
+        final top = MediaQuery.paddingOf(context).top;
+        final t = ((constraints.maxHeight - top - toolbar) / (expanded - toolbar))
+            .clamp(0.0, 1.0);
+        final collapsed = t < 0.5;
+        return Stack(
+          children: [
+            // Barra compacta (visible al bajar)
+            Positioned(
+              left: 20,
+              right: 8,
+              top: top,
+              height: toolbar,
+              child: IgnorePointer(
+                ignoring: !collapsed,
+                child: ExcludeSemantics(
+                  excluding: !collapsed,
+                  child: Opacity(
+                    opacity: 1 - t,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('LectorApp',
+                              style: ThemeService.titleStyle
+                                  .copyWith(fontSize: 20, color: c.textPrimary)),
+                        ),
+                        _avatarButton(radius: 17),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Saludo grande (visible arriba)
+            Positioned(
+              left: 20,
+              right: 8,
+              bottom: 6,
+              child: IgnorePointer(
+                ignoring: collapsed,
+                child: ExcludeSemantics(
+                  excluding: collapsed,
+                  child: Opacity(
+                    opacity: t,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(today,
+                                  style: TextStyle(
+                                      color: c.textSecondary,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 2),
+                              Semantics(
+                                header: true,
+                                child: Text(
+                                  _username != null
+                                      ? '${_greeting()},\n$_username'
+                                      : _greeting(),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ThemeService.titleStyle.copyWith(
+                                      fontSize: 28, height: 1.15, color: c.textPrimary),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        _avatarButton(radius: 21),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _avatarButton({required double radius}) {
+    final c = context.lector;
+    final hasAvatar = _avatarUrl != null && _avatarUrl!.isNotEmpty;
+    return Semantics(
+      button: true,
+      label: 'Ir a mi perfil',
+      excludeSemantics: true,
+      child: InkResponse(
+        onTap: () => TabsScreen.select(context, TabsScreen.profile),
+        radius: 26,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: c.accent, width: 2),
+              ),
+              child: CircleAvatar(
+                radius: radius - 4,
+                backgroundColor: c.accent.withValues(alpha: 0.2),
+                backgroundImage: hasAvatar ? CachedNetworkImageProvider(_avatarUrl!) : null,
+                child: hasAvatar
+                    ? null
+                    : Icon(Icons.person_rounded, size: radius, color: c.ink),
+              ),
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
 
+  Widget _buildSearchBar() {
+    final c = context.lector;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Semantics(
+        button: true,
+        label: 'Buscar libros',
+        hint: 'Por título, autor o ISBN',
+        excludeSemantics: true,
+        child: Material(
+          color: Theme.of(context).cardColor,
+          shape: const StadiumBorder(),
+          elevation: isDark ? 0 : 2,
+          shadowColor: c.accent.withValues(alpha: 0.35),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () => openSearch(context),
+            child: SizedBox(
+              height: 52,
+              child: Row(
+                children: [
+                  const SizedBox(width: 18),
+                  Icon(Icons.search_rounded, color: c.textSecondary),
+                  const SizedBox(width: 12),
+                  Text('¿Qué estás leyendo?',
+                      style: TextStyle(color: c.textSecondary, fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContinueReading(Map<String, dynamic> log) {
+    final c = context.lector;
+    final title = (log['title'] ?? '').toString();
+    final author = (log['author'] ?? log['authors'] ?? '').toString();
+    final current = asInt(log['current_page']);
+    final total = asInt(log['page_count']);
+    final progress = total > 0 ? (current / total).clamp(0.0, 1.0) : 0.0;
+    final pct = (progress * 100).round();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Semantics(
+        button: true,
+        label: 'Sigues leyendo «$title»'
+            '${total > 0 ? ', página $current de $total, $pct por ciento' : ''}',
+        hint: 'Actualizar página o escribir lo que piensas',
+        excludeSemantics: true,
+        child: Material(
+          color: c.accent.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => showModalBottomSheet<Object?>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => EditBookModal(readingLog: log),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 46,
+                    height: 69,
+                    child: BookCover(src: log['cover_url'], title: title, author: author),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Sigues leyendo',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w800, color: c.ink)),
+                        const SizedBox(height: 2),
+                        Text(title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ThemeService.titleStyle
+                                .copyWith(fontSize: 16, color: c.textPrimary)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child:
+                                    LinearProgressIndicator(value: progress, minHeight: 5),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(total > 0 ? '$pct %' : 'Pág. $current',
+                                style: TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w700, color: c.ink)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, color: c.ink),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildFeedSlivers(FeedLayout layout) {
+    if (isLoading) {
+      return [SliverToBoxAdapter(child: SizedBox(height: 620, child: _buildSkeleton()))];
+    }
+    if (_errorMessage != null) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: ErrorState(message: _errorMessage!, onRetry: loadFeed),
+        ),
+      ];
+    }
+    if (feed.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: EmptyState(
+            icon: Icons.auto_stories_rounded,
+            title: 'Aún no hay lecturas compartidas',
+            message:
+                'Cuando alguien comparta lo que está leyendo, aparecerá aquí. ¿Empiezas tú?',
+            actionLabel: 'Buscar un libro',
+            actionIcon: Icons.search_rounded,
+            onAction: () => openSearch(context),
+          ),
+        ),
+      ];
+    }
+    final compact = layout == FeedLayout.compact;
+    return [
+      SliverList.separated(
+        itemCount: feed.length + (_hasMore ? 1 : 0),
+        separatorBuilder: (context, index) => compact
+            ? Divider(height: 1, indent: 16, endIndent: 16, color: context.lector.outline)
+            : const SizedBox.shrink(),
+        itemBuilder: (context, index) {
+          if (index == feed.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final item = feed[index];
+          return UserCard(
+            item: item,
+            mode: 'feed',
+            layout: layout,
+            onLikeClick: () => _handleToggleLike(index),
+            onUserClick: () {
+              final username = item['username'];
+              if (username != null && username.toString().isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => PublicProfileScreen(username: username)),
+                );
+              }
+            },
+            onBookClick: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => BookDetailScreen(book: item)),
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
   Widget _buildNewPostsBanner() {
     return Positioned(
-      top: 16,
+      top: MediaQuery.paddingOf(context).top + 64,
       left: 0,
       right: 0,
       child: Center(

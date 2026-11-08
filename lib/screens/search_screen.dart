@@ -8,8 +8,16 @@ import '../theme/lector_colors.dart';
 import '../ui/feedback.dart';
 import '../widgets/state_views.dart';
 
+/// Abre la búsqueda como pantalla propia (desde la barra de Inicio o un estado vacío).
+Future<void> openSearch(BuildContext context) => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SearchScreen(autofocus: true)),
+    );
+
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  /// Abre el teclado al entrar (cuando se llega desde la barra de búsqueda de Inicio).
+  final bool autofocus;
+
+  const SearchScreen({super.key, this.autofocus = false});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -67,55 +75,18 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _presentOptions(BuildContext context, dynamic book) {
-    // Guardamos referencia al ScaffoldMessenger antes de abrir el modal
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final successColor = context.lector.success;
-
-    showModalBottomSheet(
+  /// Añadir directamente (antes estaba escondido tras un menú ⋮ con una sola opción).
+  Future<void> _addToLibrary(dynamic book) async {
+    final result = await showModalBottomSheet<Object?>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.add_circle_outline),
-                title: const Text('Añadir a mi biblioteca'),
-                onTap: () async {
-                  Navigator.pop(sheetContext); // Cerramos el Action Sheet
-
-                  // Abrimos el Modal de Registro
-                  final result = await showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => LogBookModal(book: book),
-                  );
-
-                  if (result != null && result['saved'] == true) {
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(
-                          content: const Text('Guardado en tu biblioteca'),
-                          backgroundColor: successColor),
-                    );
-                  }
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: const Text('Cancelar'),
-                onTap: () => Navigator.pop(sheetContext),
-              ),
-            ],
-          ),
-        );
-      },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => LogBookModal(book: book),
     );
+    if (!mounted) return;
+    if (result is Map && result['saved'] == true) {
+      showSuccess(context, 'Guardado en tu biblioteca');
+    }
   }
 
   @override
@@ -131,6 +102,8 @@ class _SearchScreenState extends State<SearchScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
+              autofocus: widget.autofocus,
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Título, autor o ISBN...',
                 prefixIcon: const Icon(Icons.search),
@@ -209,10 +182,10 @@ class _SearchScreenState extends State<SearchScreen> {
                             TextStyle(fontSize: 12, color: context.lector.textSecondary)),
                 ],
               ),
-              trailing: IconButton(
-                icon: Icon(Icons.more_vert, color: context.lector.textSecondary),
-                tooltip: 'Opciones de «${book['title'] ?? 'este libro'}»',
-                onPressed: () => _presentOptions(context, book),
+              trailing: IconButton.outlined(
+                icon: const Icon(Icons.add_rounded),
+                tooltip: 'Añadir «${book['title'] ?? 'este libro'}» a mi biblioteca',
+                onPressed: () => _addToLibrary(book),
               ),
               onTap: () {
                 Navigator.push(

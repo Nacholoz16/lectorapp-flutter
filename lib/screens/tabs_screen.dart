@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
-import 'search_screen.dart';
+import 'library_screen.dart';
 
-/// Contenedor principal: 3 pestañas en un IndexedStack (conservan scroll y datos).
+/// Contenedor principal: Inicio · Biblioteca · Perfil en un IndexedStack (conservan scroll
+/// y datos). La búsqueda vive en Inicio, como barra (ver `openSearch`).
 class TabsScreen extends StatefulWidget {
   const TabsScreen({super.key});
 
   static const int home = 0;
-  static const int search = 1;
+  static const int library = 1;
   static const int profile = 2;
 
-  /// Cambia de pestaña desde cualquier pantalla hija (p. ej. "Buscar un libro" en un
-  /// estado vacío). No hace nada si no hay un TabsScreen arriba.
+  /// Cambia de pestaña desde cualquier pantalla hija (p. ej. el avatar de Inicio → Perfil).
+  /// No hace nada si no hay un TabsScreen arriba.
   static void select(BuildContext context, int index) =>
       context.findAncestorStateOfType<_TabsScreenState>()?._select(index);
 
@@ -25,7 +26,7 @@ class _TabsScreenState extends State<TabsScreen> {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    SearchScreen(),
+    LibraryScreen(),
     ProfileScreen(),
   ];
 
@@ -53,9 +54,9 @@ class _TabsScreenState extends State<TabsScreen> {
             label: 'Inicio',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.search_outlined),
-            activeIcon: Icon(Icons.search_rounded),
-            label: 'Buscar',
+            icon: Icon(Icons.collections_bookmark_outlined),
+            activeIcon: Icon(Icons.collections_bookmark_rounded),
+            label: 'Biblioteca',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline_rounded),

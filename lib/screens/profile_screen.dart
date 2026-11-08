@@ -5,19 +5,13 @@ import '../services/auth_service.dart';
 import '../services/reading_service.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
-import '../models/reading_log.dart';
 import 'login_screen.dart';
-import '../widgets/edit_book_modal.dart';
 import '../widgets/reading_timer_modal.dart';
-import '../widgets/book_stats_modal.dart';
 import '../services/theme_service.dart';
-import '../book_cover.dart';
+import '../services/preferences_service.dart';
 import '../theme/lector_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/status_chip.dart';
 import '../ui/feedback.dart';
-import '../widgets/state_views.dart';
-import 'tabs_screen.dart';
 import '../utils/json_utils.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -37,19 +31,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isLoading = true;
   UserProfile? _profile;
 
-  int _page = 1;
-  final int _limit = 10;
-  bool _hasMore = true;
-  bool _isFetchingMore = false;
-
-  int _selectedTab = 0; // 0: Biblioteca, 1: Estadísticas
   Map<String, dynamic>? _stats;
   bool _isLoadingStats = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     ReadingService().libraryChanges.addListener(_onLibraryChanged);
     _loadMyProfile();
   }
@@ -146,25 +133,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        !_isFetchingMore &&
-        _hasMore &&
-        !_isLoading) {
-      _fetchMore();
-    }
-  }
-
   Future<void> _loadMyProfile() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _page = 1;
-        _hasMore = true;
-        _isFetchingMore = false;
-      });
-    }
+    // Solo la primera carga muestra el indicador; las recargas (p. ej. tras guardar una
+    // lectura) actualizan en silencio para no hacer parpadear la pantalla.
+    if (mounted && _profile == null) setState(() => _isLoading = true);
     try {
       final currentUser = await AuthService().getCurrentUser();
       if (currentUser != null && currentUser['username'] != null) {
@@ -172,17 +144,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         // /users/:username ya incluye la primera página de la biblioteca:
         // no hace falta pedir /library?page=1 por separado.
         final profileData = await UserService().getProfile(username);
-        final libraryData = profileData['library'] is List
-            ? profileData['library'] as List
-            : const [];
-
         if (mounted) {
           setState(() {
             _profile = UserProfile.fromJson(profileData);
             _isLoading = false;
-            if (libraryData.length < _limit) {
-              _hasMore = false;
-            }
           });
           unawaited(_loadStats());
         }
@@ -198,38 +163,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() => _isLoading = false);
         showError(context, e,
             fallback: 'No pudimos cargar tu perfil.', onRetry: _loadMyProfile);
-      }
-    }
-  }
-
-  Future<void> _fetchMore() async {
-    if (_isFetchingMore || !_hasMore || _profile == null) return;
-    setState(() => _isFetchingMore = true);
-
-    try {
-      final nextPage = _page + 1;
-      final libraryData = await UserService()
-          .getUserLibrary(_profile!.username, page: nextPage, limit: _limit);
-
-      final newLogs =
-          libraryData.map((item) => ReadingLog.fromJson(item)).toList();
-
-      if (mounted) {
-        setState(() {
-          _page = nextPage;
-          _profile!.library.addAll(newLogs);
-          _isFetchingMore = false;
-          if (libraryData.length < _limit) {
-            _hasMore = false;
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isFetchingMore = false;
-          _hasMore = false;
-        });
       }
     }
   }
@@ -256,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Ajustes de Privacidad'),
+              title: const Text('Privacidad'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -272,7 +205,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   const Divider(),
                   SwitchListTile(
-                    title: const Text('Estadísticas Públicas'),
+                    title: const Text('Estadísticas públicas'),
                     subtitle: const Text(
                         'Permite que otros usuarios vean tus estadísticas de lectura'),
                     value: areStatsPublic,
@@ -308,48 +241,81 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _onOpenThemeSheet() {
-    showModalBottomSheet(
+    const themes = [
+      ('light', 'Crema y salvia', Icons.wb_sunny_outlined),
+      ('pink', 'Rosa peonía', Icons.local_florist_outlined),
+      ('blue', 'Brisa de mar', Icons.water_drop_outlined),
+      ('dark', 'Café de medianoche', Icons.nightlight_outlined),
+    ];
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                  title: Text('Selecciona un tema',
-                      style: TextStyle(fontWeight: FontWeight.bold))),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              header: true,
+              child: Text('Apariencia', style: ThemeService.titleStyle.copyWith(fontSize: 20)),
+            ),
+            const SizedBox(height: 8),
+            for (final (value, label, icon) in themes)
               ListTile(
-                  leading: const Icon(Icons.wb_sunny_outlined),
-                  title: const Text('Claro (Batuvi)'),
-                  onTap: () {
-                    ThemeService().setTheme('light');
-                    Navigator.pop(context);
-                  }),
-              ListTile(
-                  leading: const Icon(Icons.nightlight_outlined),
-                  title: const Text('Oscuro (Nativo)'),
-                  onTap: () {
-                    ThemeService().setTheme('dark');
-                    Navigator.pop(context);
-                  }),
-              ListTile(
-                  leading: const Icon(Icons.favorite_border),
-                  title: const Text('Pink'),
-                  onTap: () {
-                    ThemeService().setTheme('pink');
-                    Navigator.pop(context);
-                  }),
-              ListTile(
-                  leading: const Icon(Icons.water_drop_outlined),
-                  title: const Text('Light Blue'),
-                  onTap: () {
-                    ThemeService().setTheme('blue');
-                    Navigator.pop(context);
-                  }),
-            ],
+                leading: Icon(icon),
+                title: Text(label),
+                onTap: () {
+                  unawaited(ThemeService().setTheme(value));
+                  Navigator.pop(sheetContext);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onOpenFeedLayoutSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ValueListenableBuilder<FeedLayout>(
+          valueListenable: PreferencesService().feedLayout,
+          builder: (context, current, _) => RadioGroup<FeedLayout>(
+            groupValue: current,
+            onChanged: (v) {
+              if (v == null) return;
+              unawaited(PreferencesService().setFeedLayout(v));
+              Navigator.pop(sheetContext);
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text('Vista del feed',
+                      style: ThemeService.titleStyle.copyWith(fontSize: 20)),
+                ),
+                const SizedBox(height: 8),
+                const RadioListTile<FeedLayout>(
+                  value: FeedLayout.cards,
+                  title: Text('Tarjetas'),
+                  subtitle: Text('Portada grande y reseña resumida'),
+                  secondary: Icon(Icons.view_agenda_outlined),
+                ),
+                const RadioListTile<FeedLayout>(
+                  value: FeedLayout.compact,
+                  title: Text('Compacta'),
+                  subtitle: Text('Más lecturas por pantalla, sin tarjetas'),
+                  secondary: Icon(Icons.view_list_outlined),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -358,13 +324,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mi biblioteca'),
+        title: const Text('Mi perfil'),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Ajustes',
             onSelected: (value) {
               if (value == 'privacy') _onOpenPrivacyDialog();
               if (value == 'theme') _onOpenThemeSheet();
+              if (value == 'feed') _onOpenFeedLayoutSheet();
               if (value == 'logout') _onLogout();
             },
             itemBuilder: (BuildContext context) => [
@@ -380,11 +348,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                       leading: Icon(Icons.palette_outlined),
                       title: Text('Apariencia'),
                       contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(
+                  value: 'feed',
+                  child: ListTile(
+                      leading: Icon(Icons.view_agenda_outlined),
+                      title: Text('Vista del feed'),
+                      contentPadding: EdgeInsets.zero)),
               PopupMenuItem(
                   value: 'logout',
                   child: ListTile(
                       leading: Icon(Icons.logout, color: context.lector.danger),
-                      title: Text('Cerrar Sesión',
+                      title: Text('Cerrar sesión',
                           style: TextStyle(color: context.lector.danger)),
                       contentPadding: EdgeInsets.zero)),
             ],
@@ -416,7 +390,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildProfileContent() {
-    final library = _profile!.library;
     final primaryColor = Theme.of(context).primaryColor;
 
     return RefreshIndicator(
@@ -493,7 +466,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Text(
                     _profile!.isProfilePublic
                         ? 'Perfil público'
-                        : 'Perfil Privado',
+                        : 'Perfil privado',
                     style: TextStyle(
                       color: _profile!.isProfilePublic
                           ? primaryColor
@@ -508,303 +481,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
 
           const SizedBox(height: 24),
-          // Tab Selector
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Semantics(
-                      button: true,
-                      selected: _selectedTab == 0,
-                      child: InkWell(
-                        onTap: () => setState(() => _selectedTab = 0),
-                        borderRadius: BorderRadius.circular(12),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _selectedTab == 0
-                                  ? primaryColor.withValues(alpha: 0.15)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Biblioteca (${library.length})',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: _selectedTab == 0
-                                    ? primaryColor
-                                    : context.lector.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Semantics(
-                      button: true,
-                      selected: _selectedTab == 1,
-                      child: InkWell(
-                        onTap: () => setState(() => _selectedTab = 1),
-                        borderRadius: BorderRadius.circular(12),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _selectedTab == 1
-                                  ? primaryColor.withValues(alpha: 0.15)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Estadísticas',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: _selectedTab == 1
-                                    ? primaryColor
-                                    : context.lector.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          if (_selectedTab == 0) ...[
-            if (library.isEmpty)
-              EmptyState(
-                icon: Icons.auto_stories_rounded,
-                title: 'Tu biblioteca está esperando su primer libro',
-                message:
-                    'Busca lo que estás leyendo y empieza a guardar lo que piensas.',
-                actionLabel: 'Buscar libros',
-                actionIcon: Icons.search_rounded,
-                onAction: () => TabsScreen.select(context, TabsScreen.search),
-              )
-            else ...[
-              ...library.map((log) => _buildBookCard(log)),
-              if (_hasMore)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24.0),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: primaryColor,
-                    ),
-                  ),
-                ),
-            ],
-          ] else ...[
-            _buildStatsContent(),
-          ],
+          _buildStatsContent(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBookCard(ReadingLog log) {
-    final primaryColor = Theme.of(context).primaryColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final logMap = {
-      'id': log.id,
-      'title': log.title,
-      'author': log.authors,
-      'authors': log.authors,
-      'cover_url': log.coverUrl,
-      'cover_image': log.coverUrl,
-      'external_id': log.externalId,
-      'status': log.status,
-      'rating': log.rating,
-      'review_text': log.reviewText,
-      'start_date': log.startDate?.toIso8601String(),
-      'finish_date': log.finishDate?.toIso8601String(),
-      'is_log_public': log.isLogPublic,
-      'page_count': log.pageCount,
-      'isbn': log.isbn,
-      'published_year': log.publishedYear,
-      'current_page': log.currentPage,
-    };
-
-    final double progress = (log.pageCount != null && log.pageCount! > 0)
-        ? (log.currentPage / log.pageCount!).clamp(0.0, 1.0)
-        : 0.0;
-    final int percentage = (progress * 100).round();
-
-    return InkWell(
-      onTap: () async {
-        await showModalBottomSheet<Object?>(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => EditBookModal(readingLog: logMap),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          border: Border(
-              bottom: BorderSide(
-                  color: (isDark ? Colors.white : Colors.black)
-                      .withValues(alpha: 0.05))),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4)),
-                ],
-              ),
-              child: SizedBox(
-                width: 50,
-                height: 75,
-                child: BookCover(
-                  src: log.coverUrl,
-                  title: log.title ?? '',
-                  author: log.authors ?? '',
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    log.title ?? '',
-                    style: GoogleFonts.lora(
-                        textStyle: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 17,
-                            height: 1.2)),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(log.authors ?? '',
-                      style: TextStyle(
-                          fontSize: 13, color: context.lector.textSecondary)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      StatusChip(status: log.status),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.bar_chart_rounded, size: 20),
-                        tooltip: 'Ver estadísticas de este libro',
-                        color: primaryColor,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) =>
-                                BookStatsModal(readingLog: logMap),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        tooltip: 'Editar',
-                        color: context.lector.textSecondary,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () async {
-                          await showModalBottomSheet<Object?>(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) =>
-                                EditBookModal(readingLog: logMap),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      if (log.rating != null && log.status != 'leyendo') ...[
-                        Row(
-                          children: [
-                            Icon(Icons.star_rounded,
-                                color: context.lector.star, size: 18),
-                            const SizedBox(width: 2),
-                            Text('${log.rating}',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: context.lector.textSecondary)),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (!log.isLogPublic)
-                        Icon(Icons.lock_outline_rounded,
-                            size: 16, color: context.lector.iconInactive),
-                    ],
-                  ),
-                  if (log.status.toLowerCase() == 'leyendo') ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          log.pageCount != null
-                              ? '${log.currentPage} / ${log.pageCount} pág.'
-                              : '${log.currentPage} pág.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: context.lector.textSecondary),
-                        ),
-                        if (log.pageCount != null)
-                          Text(
-                            '$percentage%',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: primaryColor),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 5,
-                        backgroundColor: primaryColor.withValues(alpha: 0.15),
-                        color: primaryColor,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
