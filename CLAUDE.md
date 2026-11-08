@@ -158,6 +158,12 @@ test_lectorapp/
 - El tiempo se calcula con `DateTime.now().difference(startTime!)` + `accumulatedSeconds` para no desfasarse cuando el SO suspende hilos.
 - `ReadingTimerModal` solo reescribe el campo "página actual" cuando cambia el libro seleccionado (no en cada `'update'`).
 
+### 4.6 Tasa de Refresco (90/120 Hz) y ID de la app
+
+- `DisplayModeService` (`lib/services/display_mode_service.dart`) pide el modo de mayor refresco tras el primer frame y en cada `onResume` (en `main()` la ventana aún no existe).
+- **ID de Android: `com.nacholoz3d.lectorapp`** (antes `com.nacholoz3d.test_lectorapp`). Se cambió porque HyperOS (Xiaomi, servicio *Joyose*/*PowerKeeper*) tenía el ID viejo marcado como "juego" y le imponía 60 Hz aunque la app pidiera 120 (voto `PRIORITY_MIUI_REFRESH_RATE`). No cambiar el ID una vez publicado en Google Play.
+- Diagnóstico en el teléfono: `adb shell dumpsys SurfaceFlinger | grep displayManagerPolicy` (rango `render` permitido) y `adb shell dumpsys activity service com.xiaomi.joyose | grep IsGameForeground`.
+
 ---
 
 ## 5. Contrato de la API

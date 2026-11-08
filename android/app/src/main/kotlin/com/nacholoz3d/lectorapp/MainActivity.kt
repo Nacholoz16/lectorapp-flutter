@@ -1,4 +1,4 @@
-package com.nacholoz3d.test_lectorapp
+package com.nacholoz3d.lectorapp
 
 import io.flutter.embedding.android.FlutterActivity
 
