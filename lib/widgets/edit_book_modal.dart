@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/reading_service.dart';
+import '../theme/lector_colors.dart';
 
 class EditBookModal extends StatefulWidget {
   final Map<String, dynamic> readingLog;
@@ -89,7 +90,7 @@ class _EditBookModalState extends State<EditBookModal> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+            SnackBar(content: Text('Error: $e'), backgroundColor: Theme.of(context).colorScheme.error));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -109,7 +110,7 @@ class _EditBookModalState extends State<EditBookModal> {
               child: const Text('Cancelar')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+            child: Text('Eliminar', style: TextStyle(color: context.lector.danger)),
           ),
         ],
       ),
@@ -123,7 +124,7 @@ class _EditBookModalState extends State<EditBookModal> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Error: $e'), backgroundColor: Colors.red));
+              content: Text('Error: $e'), backgroundColor: Theme.of(context).colorScheme.error));
         }
       } finally {
         if (mounted) setState(() => _isSaving = false);
@@ -157,7 +158,7 @@ class _EditBookModalState extends State<EditBookModal> {
                 centerTitle: true,
                 actions: [
                   IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      icon: Icon(Icons.delete_outline, color: context.lector.danger),
                       onPressed: _isSaving ? null : _confirmDelete),
                   TextButton(
                     onPressed: _isSaving ? null : _save,
@@ -217,7 +218,7 @@ class _EditBookModalState extends State<EditBookModal> {
                                       widget.readingLog['authors'] ??
                                       '',
                                   style:
-                                      const TextStyle(color: Colors.grey)),
+                                      TextStyle(color: context.lector.textSecondary)),
                             ],
                           ),
                         ),
@@ -243,7 +244,7 @@ class _EditBookModalState extends State<EditBookModal> {
                           labelStyle: TextStyle(
                               color: isActive
                                   ? Theme.of(context).primaryColor
-                                  : Colors.grey),
+                                  : context.lector.textSecondary),
                           onSelected: (_) =>
                               setState(() => _status = status),
                         );
@@ -290,7 +291,7 @@ class _EditBookModalState extends State<EditBookModal> {
                                 index < _rating
                                     ? Icons.star_rounded
                                     : Icons.star_border_rounded,
-                                color: const Color(0xFFFFD54F),
+                                color: context.lector.star,
                                 size: 32),
                             onPressed: () =>
                                 setState(() => _rating = index + 1),

@@ -7,6 +7,7 @@ import '../widgets/user_card.dart';
 import '../services/book_service.dart';
 import '../widgets/log_book_modal.dart';
 import 'public_profile_screen.dart';
+import '../theme/lector_colors.dart';
 
 class BookDetailScreen extends StatefulWidget {
   final Map<String, dynamic> book;
@@ -50,7 +51,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al cargar reseñas: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -239,10 +240,10 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                         child: Column(
                           children: [
                             Icon(Icons.chat_bubble_outline_rounded,
-                                size: 48, color: Colors.grey.withValues(alpha: 0.3)),
+                                size: 48, color: context.lector.textSecondary.withValues(alpha: 0.3)),
                             const SizedBox(height: 16),
                             Text('Sé el primero en opinar sobre esta obra.',
-                                style: TextStyle(color: Colors.grey.shade500)),
+                                style: TextStyle(color: context.lector.textSecondary)),
                           ],
                         ),
                       ),
@@ -302,6 +303,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final messenger = ScaffoldMessenger.of(context);
+          final successColor = context.lector.success;
           final result = await showModalBottomSheet(
             context: context,
             isScrollControlled: true,
@@ -310,9 +312,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
           );
           if (result != null && result['saved'] == true) {
             messenger.showSnackBar(
-              const SnackBar(
-                  content: Text('¡Lectura registrada exitosamente!'),
-                  backgroundColor: Colors.green),
+              SnackBar(
+                  content: const Text('¡Lectura registrada exitosamente!'),
+                  backgroundColor: successColor),
             );
             unawaited(_loadReviews());
           }
@@ -350,7 +352,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade500,
+                      color: context.lector.textSecondary,
                       letterSpacing: 1.5)),
               const SizedBox(height: 4),
               Text(value,

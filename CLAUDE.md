@@ -70,6 +70,8 @@ test_lectorapp/
 │   ├── main.dart                     # Punto de entrada: inits en paralelo (Future.wait) y auto-login JWT
 │   ├── config.dart                   # baseUrl (vía --dart-define API_BASE_URL) y navigatorKey
 │   ├── book_cover.dart               # Widget reutilizable de portada con sombra, caché y fallback
+│   ├── theme/
+│   │   └── lector_colors.dart        # ThemeExtension con tokens de color (accent/ink/textSecondary/estados) → context.lector
 │   ├── models/
 │   │   ├── book.dart                 # Modelo Book (normaliza external_id/google_id y author/authors) — SIN USO actualmente
 │   │   ├── reading_log.dart          # Modelo ReadingLog (estado, progreso, likes, reseña, safeAvatarUrl)
@@ -240,17 +242,19 @@ Todas las respuestas de error tienen la forma `{ "error": string, "code": string
 2. **Tipografía Dual:**
    - **Títulos y encabezados literarios:** Fuente `Lora` (Serif, elegante, `FontWeight.bold` o `w800`).
    - **Cuerpo de texto y controles:** Fuente `Nunito` (Sans-serif redondeada de lectura suave).
-   - **Cómo se aplica:** `ThemeService` carga `GoogleFonts.nunitoTextTheme()` y `GoogleFonts.lora(...)` (en `appBarTheme` y el getter `ThemeService.titleStyle`). Varias pantallas usan `fontFamily: 'Lora'` a mano; funciona porque el tema ya registró la fuente. Para código nuevo, preferir `GoogleFonts.lora(...)` o `ThemeService.titleStyle`.
-3. **Las 4 Paletas de Tema (`ThemeService`):**
-   - `light` (**Crema & Salvia** - Default): Primario `#8BA89F`, Fondo `#FDFBF7`, Texto `#3D4042`.
-   - `pink` (**Rosa Peonía**): Primario `#FF6B8A` / `#D8A7B1`, Fondo `#FEF9FA`.
-   - `blue` (**Brisa de Mar**): Primario `#A1C4D0`, Fondo `#F7FBFD`.
-   - `dark` (**Café de Medianoche**): Primario `#B59E86`, Fondo `#1C1917`, Cards `#292524`, Texto `#E7E5E4`.
-4. **Colores Semánticos de Estado de Lectura:**
-   - `terminado`: Verde (`#2DD55B` / `#81C784` en claro, `#66BB6A` en oscuro).
-   - `leyendo`: Azul (`#4995FF`) o `Theme.of(context).primaryColor`.
-   - `abandonado`: Rojo coral (`#FF4961` / `#E57373`).
-   - Calificaciones (Estrellas): Amarillo cálido (`#FFD54F`).
+   - **Cómo se aplica:** `ThemeService` carga `GoogleFonts.nunitoTextTheme()` y `GoogleFonts.lora(...)` (en `appBarTheme` y el getter `ThemeService.titleStyle`). Varias pantallas usan `fontFamily: 'Lora'` a mano y **eso no aplica Lora** (google_fonts registra la familia con otro nombre, p. ej. `Lora_700`): esos títulos se ven en la fuente por defecto. Usar siempre `GoogleFonts.lora(...)` o `ThemeService.titleStyle` (pendiente migrar los ~11 usos).
+3. **Las 4 Paletas de Tema (`ThemeService`, construidas por `_buildTheme` a partir de `LectorColors`):**
+   - Cada tema tiene un **pastel (`accent`)** para fondos/chips/decoración y un **`ink`** legible para texto, íconos activos y botones. `primaryColor` y `colorScheme.primary` = ink.
+   - `light` (**Crema & Salvia** - Default): accent `#8BA89F`, ink `#4F7A70`, fondo `#FDFBF7`, texto `#3D4042`, secundario `#6B6F72`.
+   - `pink` (**Rosa Peonía**): accent `#D8A7B1`, ink `#B5536A`, fondo `#FEF9FA`.
+   - `blue` (**Brisa de Mar**): accent `#A1C4D0`, ink `#3F7186`, fondo `#F7FBFD`.
+   - `dark` (**Café de Medianoche**): accent/ink `#B59E86` (texto encima `#1C1917`), fondo `#1C1917`, cards `#292524`, texto `#E7E5E4`, secundario `#A8A29E`.
+   - Colores en código nuevo: `context.lector.xxx` (`lib/theme/lector_colors.dart`) o `Theme.of(context).colorScheme`. No usar `Colors.grey/red/...` ni hex sueltos.
+4. **Colores Semánticos de Estado de Lectura** (`context.lector.statusColor(status)`):
+   - `terminado`: `success` (`#2F7D3F` claro / `#81C784` oscuro).
+   - `leyendo`: `reading` (= ink del tema).
+   - `abandonado`: `danger` (`#B33B4E` claro / `#EF9A9A` oscuro); también errores, borrar y "me gusta" activo.
+   - Estrellas: `star` (`#BF8A00` claro / `#FFD54F` oscuro).
 5. **API de Opacidad en Flutter Moderno:**
    - Se utiliza `.withValues(alpha: X)` en lugar del deprecado `.withOpacity(X)`. Mantener esta convención en todo código nuevo.
 

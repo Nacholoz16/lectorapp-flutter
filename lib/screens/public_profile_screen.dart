@@ -6,6 +6,7 @@ import '../models/user_profile.dart';
 import '../models/reading_log.dart';
 import '../book_cover.dart';
 import 'book_detail_screen.dart';
+import '../theme/lector_colors.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final String username;
@@ -141,18 +142,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'terminado':
-        return const Color(0xFF2DD55B);
-      case 'abandonado':
-        return const Color(0xFFFF4961);
-      case 'leyendo':
-        return const Color(0xFF4995FF);
-      default:
-        return const Color(0xFFB3AFB6);
-    }
-  }
+  Color _getStatusColor(String status) => context.lector.statusColor(status);
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +158,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.error_outline,
-                          size: 48, color: Colors.grey.shade400),
+                          size: 48, color: context.lector.iconInactive),
                       const SizedBox(height: 16),
                       Text('Error: $_errorMessage'),
                       const SizedBox(height: 16),
@@ -197,7 +187,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock_rounded, size: 72, color: Colors.grey.shade400),
+              Icon(Icons.lock_rounded, size: 72, color: context.lector.iconInactive),
               const SizedBox(height: 20),
               Text(
                 'Perfil Privado de @${_profile!.username}',
@@ -207,7 +197,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               const SizedBox(height: 8),
               Text(
                 'Este usuario ha configurado su perfil como privado.',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                style: TextStyle(color: context.lector.textSecondary, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -254,7 +244,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               _profile!.bio ?? 'Sin biografía aún...',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color: context.lector.textSecondary,
                   fontStyle: FontStyle.italic,
                   fontSize: 15),
             ),
@@ -289,7 +279,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color:
-                                _selectedTab == 0 ? primaryColor : Colors.grey,
+                                _selectedTab == 0 ? primaryColor : context.lector.textSecondary,
                           ),
                         ),
                       ),
@@ -312,7 +302,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color:
-                                _selectedTab == 1 ? primaryColor : Colors.grey,
+                                _selectedTab == 1 ? primaryColor : context.lector.textSecondary,
                           ),
                         ),
                       ),
@@ -332,10 +322,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   child: Column(
                     children: [
                       Icon(Icons.auto_stories_rounded,
-                          size: 64, color: Colors.grey.withValues(alpha: 0.3)),
+                          size: 64, color: context.lector.textSecondary.withValues(alpha: 0.3)),
                       const SizedBox(height: 16),
                       Text('No hay lecturas públicas.',
-                          style: TextStyle(color: Colors.grey.shade500)),
+                          style: TextStyle(color: context.lector.textSecondary)),
                     ],
                   ),
                 ),
@@ -446,14 +436,14 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Icon(Icons.lock_outline_rounded,
-                              size: 16, color: Colors.grey.shade400),
+                              size: 16, color: context.lector.iconInactive),
                         ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(log.authors ?? '',
                       style: TextStyle(
-                          fontSize: 13, color: Colors.grey.shade600)),
+                          fontSize: 13, color: context.lector.textSecondary)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -478,13 +468,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                       if (log.rating != null && log.status != 'leyendo') ...[
                         Row(
                           children: [
-                            const Icon(Icons.star_rounded,
-                                color: Color(0xFFFFD54F), size: 18),
+                            Icon(Icons.star_rounded,
+                                color: context.lector.star, size: 18),
                             const SizedBox(width: 2),
                             Text('${log.rating}',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade700)),
+                                    color: context.lector.textSecondary)),
                           ],
                         ),
                       ],
@@ -514,12 +504,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           child: Column(
             children: [
               Icon(Icons.lock_outline_rounded,
-                  size: 56, color: Colors.grey.shade400),
+                  size: 56, color: context.lector.iconInactive),
               const SizedBox(height: 16),
               Text(
                 'Las estadísticas de este usuario son privadas.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                style: TextStyle(color: context.lector.textSecondary, fontSize: 15),
               ),
             ],
           ),
@@ -600,7 +590,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                       Text(
                         '$finishedThisYear de $targetBooks libros leídos este año',
                         style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 13),
+                            color: context.lector.textSecondary, fontSize: 13),
                       ),
                     ],
                   ),
@@ -647,7 +637,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               Expanded(
                 child: _buildMetricCard(
                   icon: Icons.favorite_rounded,
-                  iconColor: const Color(0xFFE57373),
+                  iconColor: context.lector.danger,
                   title: 'Likes Recibidos',
                   value: '$totalLikes',
                 ),
@@ -660,7 +650,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               Expanded(
                 child: _buildMetricCard(
                   icon: Icons.star_rounded,
-                  iconColor: const Color(0xFFFFD54F),
+                  iconColor: context.lector.star,
                   title: 'Promedio Stars',
                   value: '$avgRating',
                 ),
@@ -701,7 +691,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 2),
           Text(title,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+              style: TextStyle(color: context.lector.textSecondary, fontSize: 12)),
         ],
       ),
     );

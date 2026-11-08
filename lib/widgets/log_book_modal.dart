@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/reading_service.dart';
+import '../theme/lector_colors.dart';
 
 class LogBookModal extends StatefulWidget {
   final Map<String, dynamic> book;
@@ -82,7 +83,7 @@ class _LogBookModalState extends State<LogBookModal> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error al guardar: $e'),
-            backgroundColor: Colors.red));
+            backgroundColor: Theme.of(context).colorScheme.error));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -163,7 +164,7 @@ class _LogBookModalState extends State<LogBookModal> {
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
                               Text(widget.book['authors'] ?? '',
-                                  style: const TextStyle(color: Colors.grey)),
+                                  style: TextStyle(color: context.lector.textSecondary)),
                             ],
                           ),
                         ),
@@ -186,7 +187,7 @@ class _LogBookModalState extends State<LogBookModal> {
                           labelStyle: TextStyle(
                               color: isActive
                                   ? Theme.of(context).primaryColor
-                                  : Colors.grey),
+                                  : context.lector.textSecondary),
                           onSelected: (_) => setState(() => _status = status),
                         );
                       }).toList(),
@@ -230,7 +231,7 @@ class _LogBookModalState extends State<LogBookModal> {
                                 index < _rating
                                     ? Icons.star_rounded
                                     : Icons.star_border_rounded,
-                                color: const Color(0xFFFFD54F),
+                                color: context.lector.star,
                                 size: 32),
                             onPressed: () =>
                                 setState(() => _rating = index + 1),

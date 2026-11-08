@@ -67,8 +67,8 @@ class BookCover extends StatelessWidget {
         child: Text(
           title.isNotEmpty ? title : 'Sin Portada',
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onPrimary,
             fontWeight: FontWeight.bold,
             fontFamily: 'Lora',
             fontSize: 12,

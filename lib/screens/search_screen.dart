@@ -4,6 +4,7 @@ import 'package:test_lectorapp/book_cover.dart';
 import '../services/book_service.dart';
 import 'book_detail_screen.dart';
 import '../widgets/log_book_modal.dart';
+import '../theme/lector_colors.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -62,7 +63,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error en la búsqueda: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -72,6 +73,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void _presentOptions(BuildContext context, dynamic book) {
     // Guardamos referencia al ScaffoldMessenger antes de abrir el modal
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final successColor = context.lector.success;
 
     showModalBottomSheet(
       context: context,
@@ -99,9 +101,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
                   if (result != null && result['saved'] == true) {
                     scaffoldMessenger.showSnackBar(
-                      const SnackBar(
-                          content: Text('¡Libro registrado exitosamente!'),
-                          backgroundColor: Colors.green),
+                      SnackBar(
+                          content: const Text('¡Libro registrado exitosamente!'),
+                          backgroundColor: successColor),
                     );
                   }
                 },
@@ -206,11 +208,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   if (book['published_year'] != null)
                     Text(book['published_year'].toString(),
                         style:
-                            const TextStyle(fontSize: 12, color: Colors.grey)),
+                            TextStyle(fontSize: 12, color: context.lector.textSecondary)),
                 ],
               ),
               trailing: IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.grey),
+                icon: Icon(Icons.more_vert, color: context.lector.textSecondary),
                 onPressed: () => _presentOptions(context, book),
               ),
               onTap: () {
@@ -239,7 +241,7 @@ class _SearchScreenState extends State<SearchScreen> {
               size: 64, color: Theme.of(context).primaryColor.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           Text('Busca para agregar a tu lista.',
-              style: TextStyle(color: Colors.grey[600])),
+              style: TextStyle(color: context.lector.textSecondary)),
         ],
       ),
     );

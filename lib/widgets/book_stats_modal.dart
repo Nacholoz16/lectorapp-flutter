@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/reading_service.dart';
 import '../book_cover.dart';
+import '../theme/lector_colors.dart';
 
 class BookStatsModal extends StatefulWidget {
   final Map<String, dynamic> readingLog;
@@ -82,7 +83,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: context.lector.outline,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -117,7 +118,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
                       ),
                       const SizedBox(height: 4),
                       Text(author,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                          style: TextStyle(color: context.lector.textSecondary, fontSize: 13)),
                       const SizedBox(height: 6),
                       Container(
                         padding:
@@ -230,7 +231,7 @@ class _BookStatsModalState extends State<BookStatsModal> {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 2),
           Text(label,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+              style: TextStyle(color: context.lector.textSecondary, fontSize: 11)),
         ],
       ),
     );

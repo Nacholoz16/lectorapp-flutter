@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'tabs_screen.dart';
+import '../theme/lector_colors.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -47,7 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final error = _validate(username, email, password);
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: Colors.red));
+          SnackBar(content: Text(error), backgroundColor: Theme.of(context).colorScheme.error));
       return;
     }
 
@@ -69,7 +70,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red),
+              backgroundColor: Theme.of(context).colorScheme.error),
         );
       }
     } finally {
@@ -116,34 +117,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Únete a la comunidad de lectores',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(color: context.lector.textSecondary, fontSize: 16),
               ),
               const SizedBox(height: 48),
               TextField(
                 controller: _usernameController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Nombre de Usuario',
-                  prefixIcon: Icon(Icons.alternate_email, color: Colors.grey),
+                  prefixIcon: Icon(Icons.alternate_email, color: context.lector.textSecondary),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Correo Electrónico',
-                  prefixIcon: Icon(Icons.email_outlined, color: Colors.grey),
+                  prefixIcon: Icon(Icons.email_outlined, color: context.lector.textSecondary),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Contraseña (mínimo 8 caracteres)',
-                  prefixIcon: Icon(Icons.lock_outline, color: Colors.grey),
+                  prefixIcon: Icon(Icons.lock_outline, color: context.lector.textSecondary),
                 ),
               ),
               const SizedBox(height: 40),
@@ -152,11 +153,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _onRegister,
                   child: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
+                              color: Theme.of(context).colorScheme.onPrimary, strokeWidth: 2))
                       : const Text('Comenzar a leer',
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),

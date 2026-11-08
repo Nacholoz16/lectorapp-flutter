@@ -5,6 +5,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../services/reading_service.dart';
 import '../services/timer_background_service.dart';
+import '../theme/lector_colors.dart';
 
 class ReadingTimerModal extends StatefulWidget {
   final List<dynamic> readingLogs; // Lista de libros en estado 'leyendo'
@@ -155,7 +156,7 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al guardar la sesión: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -184,7 +185,7 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: context.lector.outline,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -215,13 +216,13 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                     Icon(
                       Icons.menu_book_rounded,
                       size: 48,
-                      color: Colors.grey.shade400,
+                      color: context.lector.iconInactive,
                     ),
                     const SizedBox(height: 12),
                     Text(
                       'No tienes libros en estado "LEYENDO" actualmente.\nAgrega uno desde el buscador para iniciar el cronómetro.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(color: context.lector.textSecondary),
                     ),
                   ],
                 ),
@@ -265,7 +266,7 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                   fontSize: 54,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
-                  color: _isRunning ? primaryColor : Colors.grey.shade700,
+                  color: _isRunning ? primaryColor : context.lector.textSecondary,
                 ),
               ),
               const SizedBox(height: 24),
@@ -313,8 +314,8 @@ class _ReadingTimerModalState extends State<ReadingTimerModal> {
                         icon: const Icon(Icons.stop_rounded, size: 24),
                         label: const Text('Finalizar'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade400,
-                          foregroundColor: Colors.white,
+                          backgroundColor: context.lector.danger,
+                          foregroundColor: Theme.of(context).colorScheme.onError,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
                             vertical: 12,

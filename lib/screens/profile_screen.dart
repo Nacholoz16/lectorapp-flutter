@@ -11,6 +11,7 @@ import '../widgets/reading_timer_modal.dart';
 import '../widgets/book_stats_modal.dart';
 import '../services/theme_service.dart';
 import '../book_cover.dart';
+import '../theme/lector_colors.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -135,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('No se pudo guardar la meta: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -185,9 +186,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (mounted) {
           setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No se pudo obtener los datos de la sesión'),
-              backgroundColor: Colors.red,
+            SnackBar(
+              content: const Text('No se pudo obtener los datos de la sesión'),
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
@@ -198,10 +199,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al cargar el perfil: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             action: SnackBarAction(
               label: 'Reintentar',
-              textColor: Colors.white,
+              textColor: Theme.of(context).colorScheme.onError,
               onPressed: _loadMyProfile,
             ),
           ),
@@ -242,18 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'terminado':
-        return const Color(0xFF2DD55B);
-      case 'abandonado':
-        return const Color(0xFFFF4961);
-      case 'leyendo':
-        return const Color(0xFF4995FF);
-      default:
-        return const Color(0xFFB3AFB6);
-    }
-  }
+  Color _getStatusColor(String status) => context.lector.statusColor(status);
 
   Future<void> _onLogout() async {
     await AuthService().logout();
@@ -399,12 +389,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                       leading: Icon(Icons.palette_outlined),
                       title: Text('Apariencia'),
                       contentPadding: EdgeInsets.zero)),
-              const PopupMenuItem(
+              PopupMenuItem(
                   value: 'logout',
                   child: ListTile(
-                      leading: Icon(Icons.logout, color: Colors.red),
+                      leading: Icon(Icons.logout, color: context.lector.danger),
                       title: Text('Cerrar Sesión',
-                          style: TextStyle(color: Colors.red)),
+                          style: TextStyle(color: context.lector.danger)),
                       contentPadding: EdgeInsets.zero)),
             ],
           ),
@@ -418,7 +408,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.error_outline,
-                          size: 48, color: Colors.grey.shade400),
+                          size: 48, color: context.lector.iconInactive),
                       const SizedBox(height: 16),
                       const Text('No se pudo cargar el perfil'),
                       const SizedBox(height: 16),
@@ -476,7 +466,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               _profile!.bio ?? 'Sin biografía aún...',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color: context.lector.textSecondary,
                   fontStyle: FontStyle.italic,
                   fontSize: 15),
             ),
@@ -490,7 +480,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               decoration: BoxDecoration(
                 color: _profile!.isProfilePublic
                     ? primaryColor.withValues(alpha: 0.15)
-                    : Colors.grey.withValues(alpha: 0.1),
+                    : context.lector.textSecondary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -503,7 +493,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     size: 16,
                     color: _profile!.isProfilePublic
                         ? primaryColor
-                        : Colors.grey[600],
+                        : context.lector.textSecondary,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -513,7 +503,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     style: TextStyle(
                       color: _profile!.isProfilePublic
                           ? primaryColor
-                          : Colors.grey[600],
+                          : context.lector.textSecondary,
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
                     ),
@@ -551,7 +541,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: _selectedTab == 0 ? primaryColor : Colors.grey,
+                            color: _selectedTab == 0 ? primaryColor : context.lector.textSecondary,
                           ),
                         ),
                       ),
@@ -573,7 +563,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: _selectedTab == 1 ? primaryColor : Colors.grey,
+                            color: _selectedTab == 1 ? primaryColor : context.lector.textSecondary,
                           ),
                         ),
                       ),
@@ -593,10 +583,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: Column(
                     children: [
                       Icon(Icons.auto_stories_rounded,
-                          size: 64, color: Colors.grey.withValues(alpha: 0.3)),
+                          size: 64, color: context.lector.textSecondary.withValues(alpha: 0.3)),
                       const SizedBox(height: 16),
                       Text('Aún no has registrado lecturas.',
-                          style: TextStyle(color: Colors.grey.shade500)),
+                          style: TextStyle(color: context.lector.textSecondary)),
                     ],
                   ),
                 ),
@@ -712,7 +702,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const SizedBox(height: 4),
                   Text(log.authors ?? '',
                       style:
-                          TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                          TextStyle(fontSize: 13, color: context.lector.textSecondary)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -753,7 +743,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, size: 18),
                         tooltip: 'Editar',
-                        color: Colors.grey.shade600,
+                        color: context.lector.textSecondary,
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: () async {
@@ -773,20 +763,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                       if (log.rating != null && log.status != 'leyendo') ...[
                         Row(
                           children: [
-                            const Icon(Icons.star_rounded,
-                                color: Color(0xFFFFD54F), size: 18),
+                            Icon(Icons.star_rounded,
+                                color: context.lector.star, size: 18),
                             const SizedBox(width: 2),
                             Text('${log.rating}',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade700)),
+                                    color: context.lector.textSecondary)),
                           ],
                         ),
                         const SizedBox(width: 8),
                       ],
                       if (!log.isLogPublic)
                         Icon(Icons.lock_outline_rounded,
-                            size: 16, color: Colors.grey.shade400),
+                            size: 16, color: context.lector.iconInactive),
                     ],
                   ),
                   if (log.status.toLowerCase() == 'leyendo') ...[
@@ -799,7 +789,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ? '${log.currentPage} / ${log.pageCount} pág.'
                               : '${log.currentPage} pág.',
                           style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade600),
+                              fontSize: 11, color: context.lector.textSecondary),
                         ),
                         if (log.pageCount != null)
                           Text(
@@ -931,7 +921,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       Text(
                         '$finishedThisYear de $targetBooks libros leídos este año',
                         style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 13),
+                            color: context.lector.textSecondary, fontSize: 13),
                       ),
                     ],
                   ),
@@ -978,7 +968,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               Expanded(
                 child: _buildMetricCard(
                   icon: Icons.favorite_rounded,
-                  iconColor: const Color(0xFFE57373),
+                  iconColor: context.lector.danger,
                   title: 'Likes Recibidos',
                   value: '${_stats?['total_likes'] ?? 0}',
                 ),
@@ -991,7 +981,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               Expanded(
                 child: _buildMetricCard(
                   icon: Icons.star_rounded,
-                  iconColor: const Color(0xFFFFD54F),
+                  iconColor: context.lector.star,
                   title: 'Promedio Stars',
                   value: '$avgRating',
                 ),
@@ -1032,7 +1022,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 2),
           Text(title,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+              style: TextStyle(color: context.lector.textSecondary, fontSize: 12)),
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'tabs_screen.dart'; // A donde iremos tras loguearnos
 import 'register_screen.dart';
+import '../theme/lector_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -88,19 +89,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Tu rincón de lectura acogedor',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(color: context.lector.textSecondary, fontSize: 16),
               ),
               const SizedBox(height: 48),
 
               // Inputs ultra limpios (El ThemeService dibuja el fondo y los bordes redondos)
               TextField(
                 controller: _identifierController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText:
                       'Email o Usuario', // Usamos hintText para un look más moderno
-                  prefixIcon: Icon(Icons.person_outline, color: Colors.grey),
+                  prefixIcon: Icon(Icons.person_outline, color: context.lector.textSecondary),
                 ),
               ),
               const SizedBox(height: 16),
@@ -108,9 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Contraseña',
-                  prefixIcon: Icon(Icons.lock_outline, color: Colors.grey),
+                  prefixIcon: Icon(Icons.lock_outline, color: context.lector.textSecondary),
                 ),
               ),
               const SizedBox(height: 40),
@@ -121,11 +122,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _onLogin,
                   child: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
+                              color: Theme.of(context).colorScheme.onPrimary, strokeWidth: 2))
                       : const Text('Ingresar',
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
@@ -137,8 +138,8 @@ class _LoginScreenState extends State<LoginScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('¿Aún no tienes tu biblioteca?',
-                      style: TextStyle(color: Colors.grey)),
+                  Text('¿Aún no tienes tu biblioteca?',
+                      style: TextStyle(color: context.lector.textSecondary)),
                   TextButton(
                     onPressed: () {
                       Navigator.push(

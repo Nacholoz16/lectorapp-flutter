@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:test_lectorapp/book_cover.dart';
 import 'package:test_lectorapp/utils/json_utils.dart';
+import '../theme/lector_colors.dart';
 
 class UserCard extends StatelessWidget {
   final Map<String, dynamic> item;
@@ -21,24 +22,8 @@ class UserCard extends StatelessWidget {
     this.onUserClick,
   });
 
-  // Colores Pastel para los estados
-  Color _getStatusColor(String status, BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    switch (status.toLowerCase()) {
-      case 'terminado':
-        return isDark
-            ? const Color(0xFF66BB6A)
-            : const Color(0xFF81C784); // Verde Pastel
-      case 'abandonado':
-        return isDark
-            ? const Color(0xFFEF5350)
-            : const Color(0xFFE57373); // Rojo Pastel
-      case 'leyendo':
-        return Theme.of(context).primaryColor; // Toma el color Salvia/Rosa/Azul
-      default:
-        return Colors.grey.shade400;
-    }
-  }
+  Color _getStatusColor(String status, BuildContext context) =>
+      context.lector.statusColor(status);
 
   Future<void> _share(BuildContext context) async {
     final bookId =
@@ -111,7 +96,7 @@ class UserCard extends StatelessWidget {
                             Text(
                               formattedDate,
                               style: TextStyle(
-                                  color: Colors.grey.shade500, fontSize: 13),
+                                  color: context.lector.textSecondary, fontSize: 13),
                             ),
                           ],
                         ),
@@ -202,7 +187,7 @@ class UserCard extends StatelessWidget {
                                     .toUpperCase(),
                                 style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                    color: context.lector.textSecondary,
                                     letterSpacing: 0.5),
                               ),
                               const SizedBox(height: 8),
@@ -214,7 +199,7 @@ class UserCard extends StatelessWidget {
                                           ? Icons.star_rounded
                                           : Icons.star_border_rounded,
                                       size: 18,
-                                      color: const Color(0xFFFFD54F),
+                                      color: context.lector.star,
                                     );
                                   }),
                                 ),
@@ -236,7 +221,7 @@ class UserCard extends StatelessWidget {
                                         children: [
                                           Text(
                                             pageCount != null ? '$currentPage / $pageCount pág.' : '$currentPage pág.',
-                                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                            style: TextStyle(fontSize: 11, color: context.lector.textSecondary),
                                           ),
                                           if (pageCount != null)
                                             Text(
@@ -277,7 +262,7 @@ class UserCard extends StatelessWidget {
                   IconButton(
                     icon: Icon(
                       hasLiked ? Icons.favorite : Icons.favorite_border,
-                      color: hasLiked ? const Color(0xFFE57373) : Colors.grey.shade500,
+                      color: hasLiked ? context.lector.danger : context.lector.textSecondary,
                       size: 22,
                     ),
                     onPressed: onLikeClick,
@@ -285,7 +270,7 @@ class UserCard extends StatelessWidget {
                   Text(
                     '${item['likes_count'] ?? 0}',
                     style: TextStyle(
-                      color: hasLiked ? const Color(0xFFE57373) : Colors.grey.shade600,
+                      color: hasLiked ? context.lector.danger : context.lector.textSecondary,
                       fontWeight: hasLiked ? FontWeight.bold : FontWeight.normal,
                       fontSize: 14,
                     ),
@@ -294,9 +279,9 @@ class UserCard extends StatelessWidget {
                   TextButton.icon(
                     onPressed: () => _share(context),
                     icon: Icon(Icons.ios_share_rounded,
-                        color: Colors.grey.shade500, size: 20),
+                        color: context.lector.textSecondary, size: 20),
                     label: Text('Compartir',
-                        style: TextStyle(color: Colors.grey.shade500)),
+                        style: TextStyle(color: context.lector.textSecondary)),
                     style: TextButton.styleFrom(
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20))),
