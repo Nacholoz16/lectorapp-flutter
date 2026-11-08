@@ -231,6 +231,8 @@ Todas las respuestas de error tienen la forma `{ "error": string, "code": string
 
 ## 6. Sistema de Diseño y Convenciones de UI
 
+> **Skills de diseño (`.claude/skills/`):** `lectorapp-design-system` (tokens accesibles, tipografía, componentes), `lectorapp-accessibility` (TalkBack, 48 dp, texto al 200 %, contraste), `lectorapp-ux-patterns` (voz, estados, borradores, privacidad) y `lectorapp-ui-review` (auditoría priorizada de una pantalla). Lo de esta sección describe el estado **actual**; las skills marcan hacia dónde migrar (p. ej. los pasteles no pasan contraste como texto o como fondo de botón con texto blanco).
+
 1. **Estética "Acogedora / Pastel" (Efecto Burbuja):**
    - Bordes altamente redondeados en tarjetas, inputs y botones (`BorderRadius.circular(20)` a `24.0`).
    - Sombras difusas y suaves coloreadas con el `primaryColor` activo a baja opacidad (`primaryColor.withValues(alpha: 0.08)`).
