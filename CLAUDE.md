@@ -349,6 +349,22 @@ y los secretos están en `~/[LECTORAPP]/.env` (fuera de git). El front web viejo
 
 ---
 
+## 8b. Flujo de trabajo con agentes (backlog)
+
+Las tareas de `BACKLOG.md` se implementan con dos subagentes definidos en `.claude/agents/`, coordinados
+por la sesión principal (**orquestador**). Un subagente no puede invocar a otro: toda entrega pasa por el orquestador.
+
+1. **Orquestador → `desarrollador`** (modelo heredado): un encargo por tarea con ID, historia, criterios de
+   aceptación, decisiones relevantes (D1–D7), repos/archivos implicados y restricciones. Nada de producción.
+2. **`desarrollador`** implementa, corre analyze/tests y responde con su **informe de entrega**. No hace commits.
+3. **Orquestador → `revisor`** (modelo **opus**, solo lectura + Bash): pasarle **solo** esa tarea — criterios,
+   lista de archivos tocados / diff, cómo probar y número de ronda —, no el backlog entero ni el historial.
+4. **`revisor`** responde `APROBADO`, `CAMBIOS REQUERIDOS` o (ronda 3) `ESCALAR AL USUARIO`.
+5. Con cambios: reenviar los hallazgos al **mismo** desarrollador (`SendMessage`, conserva contexto) y volver al paso 3.
+   **Máximo 3 rondas** por tarea; si no aprueba a la 3.ª, detener esa tarea y escalar al usuario con el resumen.
+6. Con `APROBADO`: el orquestador hace el commit (mensaje con el ID de la tarea), marca `[x]` en `BACKLOG.md` y sigue.
+7. Deploys, cambios en el servidor y pushes: solo el orquestador y con confirmación del usuario.
+
 ## 9. Pendientes Conocidos
 
 El trabajo planificado de la 1.1.0 está en [`BACKLOG.md`](BACKLOG.md). La lista de tareas no bloqueantes está en [`PENDIENTES.md`](PENDIENTES.md): tareas de antes de publicar (rotar clave de ZeptoMail, firma de release, bundle ID de iOS), de código (refresh tokens, modelos tipados en el feed, FULLTEXT en la búsqueda, dependencias) y de diseño. Actualizarla al cerrar o descubrir tareas.
