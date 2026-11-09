@@ -20,6 +20,22 @@ Tareas conocidas que **no bloquean el desarrollo** y se retoman más adelante.
 - [ ] **Bundle ID de iOS.** Sigue siendo `com.example.helloWorld` (plantilla). Cambiarlo a
   `com.nacholoz3d.lectorapp` (como Android) en `ios/Runner.xcodeproj` antes de compilar para iPhone.
 
+## Versión 1.0.1 — gestos de deslizamiento
+
+- [ ] **Deslizar entre pestañas principales (Inicio · Biblioteca · Perfil)**, estilo Instagram.
+  Cambiar el `IndexedStack` de `lib/screens/tabs_screen.dart` por un `PageView` con `PageController`:
+  `onPageChanged` actualiza la barra inferior y tocar la barra hace `animateToPage`. Las pantallas ya
+  conservan estado y scroll (`AutomaticKeepAliveClientMixin`). `PageView` decide la dirección del gesto
+  al empezar, así que el scroll vertical del feed no cambia de pestaña por accidente; el gesto "atrás"
+  de Android solo actúa desde el borde. `TabsScreen.select()` debe seguir funcionando (usar el controller).
+- [ ] **Deslizar entre filtros de Mi biblioteca (Leyendo · Terminados · Lo dejé).**
+  En `lib/screens/library_screen.dart`, cambiar el `SegmentedButton` por `TabBar` + `TabBarView`
+  (o un `PageView` sincronizado con los segmentos). Dentro de Biblioteca el gesto lo toman los filtros:
+  al llegar al último filtro no se pasa a Perfil (igual que un carrusel dentro de Instagram).
+  Mantener los contadores en las etiquetas y la tarjeta "Empezar a leer" en el filtro Leyendo.
+- Probar ambos en el teléfono (no solo en Chrome): diagonales al hacer scroll, gesto atrás desde el
+  borde y TalkBack (las pestañas deben seguir siendo botones con nombre).
+
 ## Código (sprint)
 
 - [ ] **Modelos tipados en el feed.** `HomeScreen` / `UserCard` usan `Map` crudos; migrar a `ReadingLog`
