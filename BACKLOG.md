@@ -19,7 +19,8 @@ Estado: `[ ]` por hacer · `[~]` en curso · `[x]` hecho.
 | D2 | Sesión del administrador en la web: solo **token de acceso de 30 min en memoria**, sin refresh en el navegador. Al recargar o tras 30 min se vuelve a iniciar sesión. |
 | D3 | El administrador es **`test001`**: `users.role = 'admin'` asignado por SQL en el servidor (comprobar que la cuenta existe en producción). Ningún endpoint permite cambiar el rol. |
 | D4 | Una reseña con **3 denuncias de personas distintas** pasa a **privada de forma permanente** (`moderation_locked_at`): sale del feed y de las reseñas del libro, y su autor **no puede volver a hacerla pública**. Se **avisa al autor** (correo + aviso en la app). Solo un admin puede revertirlo (si descarta las denuncias). |
-| D5 | **Cuenta inhabilitada = suspendida = no puede entrar.** Dos orígenes: **manual** (un admin la banea) o **automático** (acumula **10 denuncias de personas distintas** sobre la cuenta o su contenido). En ambos casos la persona puede **exportar su biblioteca** y **apelar una vez**. No existe "inhabilitar mi cuenta" voluntario; sí "eliminar mi cuenta" (lo exige Google). |
+| D5 | **Inhabilitar = banear (sanción): la cuenta queda suspendida y no puede entrar.** Dos orígenes: **manual** (un admin la banea) o **automático** (acumula **10 denuncias de personas distintas** sobre la cuenta o su contenido). En ambos casos la persona puede **exportar su biblioteca** y **apelar una vez**. |
+| D7 | **Desactivar = voluntario del usuario** (distinto de inhabilitar). Botón + confirmación para desactivar y lo mismo para reactivar. Mientras está desactivada: el usuario **sí entra**, pero solo ve **su biblioteca en modo lectura** (sin feed, sin perfiles ajenos, sin buscar) y **no puede hacer acciones** (crear, editar, dar "me gusta", denunciar, cronómetro). Para los demás su perfil está **oculto**. Al desactivar, **todas sus lecturas y opiniones públicas pasan a privadas**; al reactivar, **vuelven a su visibilidad anterior** (salvo las bloqueadas por moderación, que siguen privadas), y se le **recuerda** antes y después de confirmar. "Eliminar mi cuenta" sigue existiendo aparte (lo exige Google). |
 | D6 | **Una apelación** por suspensión. El admin la *acepta* (se reactiva la cuenta) o la *rechaza* (definitivo). |
 
 ## Modelo de datos (resumen)
@@ -27,12 +28,14 @@ Estado: `[ ]` por hacer · `[~]` en curso · `[x]` hecho.
 ```sql
 ALTER TABLE users
   ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user',
-  ADD COLUMN status ENUM('active','suspended') NOT NULL DEFAULT 'active',
+  ADD COLUMN status ENUM('active','deactivated','suspended') NOT NULL DEFAULT 'active',
   ADD COLUMN status_changed_at BIGINT UNSIGNED NULL,
   ADD COLUMN terms_version VARCHAR(20) NULL,          -- versión aceptada (p. ej. '2026-11')
   ADD COLUMN terms_accepted_at DATETIME NULL;
 
-ALTER TABLE reading_logs ADD COLUMN moderation_locked_at DATETIME NULL;  -- privada permanente (D4)
+ALTER TABLE reading_logs
+  ADD COLUMN moderation_locked_at DATETIME NULL,          -- privada permanente (D4)
+  ADD COLUMN public_before_deactivation TINYINT(1) NULL;  -- visibilidad a restaurar al reactivar (D7)
 
 CREATE TABLE user_blocks (blocker_id, blocked_id, created_at, PRIMARY KEY (blocker_id, blocked_id));
 
@@ -63,6 +66,7 @@ Todo con **migración idempotente** (`npm run migrate`) y en el setup de la BD d
 
 | Método y ruta | Quién | Para qué |
 |---|---|---|
+| `POST /account/deactivate` · `POST /account/reactivate` | usuario | Desactivar / reactivar mi cuenta (D7) |
 | `DELETE /account` | usuario | Eliminar mi cuenta (con contraseña) |
 | `POST /account/deletion-request` · `POST /account/deletion-confirm` | público (web) | Borrado por email + código de 6 dígitos |
 | `POST /account/terms` | usuario | Aceptar la versión vigente de los términos |
@@ -86,7 +90,8 @@ Como usuario, quiero saber qué reglas aplican a lo que publico.
 - [ ] Texto en español, versión `2026-11`: qué es el servicio, requisitos (edad mínima 13 años),
   cuenta y seguridad, **conducta y contenido prohibido** (odio, acoso, spam, contenido sexual o ilegal,
   suplantación), propiedad del contenido y licencia para mostrarlo, **moderación** (denuncias, ocultar,
-  baneo, una apelación), inhabilitar y eliminar la cuenta, limitación de responsabilidad, cambios en
+  inhabilitación por sanción, una apelación), desactivación voluntaria y eliminación de la cuenta,
+  limitación de responsabilidad, cambios en
   los términos, contacto.
 - **Aceptación:** cubre los puntos que pide la política de contenido generado por usuarios de Google;
   lenguaje claro; fecha y versión visibles.
@@ -109,9 +114,35 @@ Como plataforma, necesito que nadie publique sin aceptar los términos.
 
 ---
 
-## Épica 2 — Eliminar la cuenta · *Prioridad 1*
+## Épica 2 — Desactivar y eliminar la cuenta · *Prioridad 1*
 
-> No hay "inhabilitar mi cuenta" voluntario (D5): inhabilitar es una sanción (Épica 4).
+> Ojo con los términos: **desactivar** es voluntario y reversible (esta épica); **inhabilitar**
+> es una sanción del sistema o de un admin (Épica 4).
+
+### 2.1 Desactivar y reactivar mi cuenta (voluntario) · M
+Como usuario, quiero tomarme un descanso: ocultar mi perfil sin perder mi biblioteca.
+- [ ] API `POST /account/deactivate` (con contraseña), en una transacción:
+  guardar en `public_before_deactivation` la visibilidad actual de **cada** lectura, poner todas en
+  privadas (`is_log_public = 0`), `status = 'deactivated'`, `status_changed_at`.
+- [ ] Estando desactivada:
+  - `protect` deja pasar, pero un middleware `requireActive` responde `403 ACCOUNT_DEACTIVATED` en todo
+    lo que **no** sea: ver mi biblioteca y mis estadísticas, reactivar, cerrar sesión, eliminar la cuenta.
+  - Para los demás: perfil → 404, nada suyo en feed, reseñas por libro ni contadores públicos.
+- [ ] API `POST /account/reactivate` (botón + confirmación): restaura cada lectura a
+  `public_before_deactivation` (las que tengan `moderation_locked_at` siguen privadas), limpia la
+  columna, `status = 'active'`. Devuelve cuántas volvieron a ser públicas.
+- [ ] App, desactivar: Perfil → ⚙ → Cuenta → **Desactivar mi cuenta** → pantalla que explica qué pasa
+  ("Tus N lecturas públicas pasarán a privadas; cuando vuelvas, regresarán como estaban") →
+  confirmación.
+- [ ] App, estado desactivado: al entrar, modo **solo lectura**: solo la pestaña Biblioteca (sin Inicio,
+  sin buscar, sin botones de añadir/editar/cronómetro), con un aviso fijo "Tu cuenta está desactivada" y el
+  botón **Reactivar mi cuenta**.
+- [ ] App, reactivar: confirmación que **recuerda** "Tus N lecturas que eran públicas volverán a ser
+  públicas" → tras reactivar, aviso "Volvieron a ser públicas N lecturas" y la app vuelve a la normalidad.
+- [ ] Tests E2E: visibilidad guardada y restaurada exactamente; bloqueadas por moderación siguen privadas;
+  cada acción prohibida devuelve 403; otro usuario no ve nada del desactivado.
+- **Aceptación:** desactivar y reactivar dejan cada lectura exactamente como estaba; el usuario siempre
+  sabe qué va a pasar antes de confirmar.
 
 ### 2.2 Eliminar mi cuenta desde la app · M
 Como usuario, quiero borrar mi cuenta y mis datos para siempre.
@@ -278,7 +309,7 @@ Como administrador, quiero moderar desde el navegador.
 | Sprint | Contenido | Resultado |
 |---|---|---|
 | **1** | D1–D6 · 1.1 · 1.2 · 4.1 · 5.1 · 5.2 | Web nueva en `lectorapp.nacholoz3d.cl` con términos y privacidad publicados |
-| **2** | 1.3 · 2.2 · 2.3 | Aceptación de términos y eliminar la cuenta (app + web) |
+| **2** | 1.3 · 2.1 · 2.2 · 2.3 | Aceptación de términos, desactivar/reactivar y eliminar la cuenta (app + web) |
 | **3** | 3.1 · 3.2 · 4.2 · 4.3 · 4.4 | Denunciar, bloquear, reseñas privadas, suspensión (manual y automática), exportar y apelar |
 | **4** | 5.3 | Panel de administración completo |
 | **5** | 6.1 · 6.2 · 6.3 | Datos protegidos |
