@@ -197,9 +197,9 @@ Como usuario, no quiero ver nada de una persona.
 ## Épica 4 — Moderación: baneo y apelación · *Prioridad 2*
 
 ### 4.1 Rol de administrador y auditoría · S
-- [ ] `users.role`; middleware `requireAdmin` (después de `protect`); tabla `admin_actions` y registro
+- [x] `users.role`; middleware `requireAdmin` (después de `protect`); tabla `admin_actions` y registro
   de cada acción de admin (quién, qué, a quién, cuándo, nota).
-- [ ] Rate limit propio para `/admin/*`; ningún endpoint permite cambiar `role`.
+- [x] Rate limit propio para `/admin/*`; ningún endpoint permite cambiar `role`.
 - **Aceptación:** un usuario normal recibe 403 en todo `/admin/*` (test).
 
 ### 4.2 Suspender (banear) y reactivar · M
