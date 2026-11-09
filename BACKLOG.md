@@ -3,7 +3,7 @@
 Objetivo de la versión: cumplir las políticas de Google Play (cuentas, contenido generado por usuarios,
 privacidad) y dar herramientas de moderación, con una web propia en **https://lectorapp.nacholoz3d.cl**.
 
-Creado: 2026-11-09. Estimaciones: **S** ≈ medio día · **M** ≈ 1–2 días · **L** ≈ 3+ días.
+Creado: 2026-11-09 · Decisiones confirmadas: 2026-11-09. Estimaciones: **S** ≈ medio día · **M** ≈ 1–2 días · **L** ≈ 3+ días.
 Estado: `[ ]` por hacer · `[~]` en curso · `[x]` hecho.
 
 > Fuera de este backlog (siguen en [`PENDIENTES.md`](PENDIENTES.md)): firma de release, gestos 1.0.1,
@@ -11,30 +11,28 @@ Estado: `[ ]` por hacer · `[~]` en curso · `[x]` hecho.
 
 ---
 
-## Decisiones (confirmar antes de empezar)
+## Decisiones (confirmadas el 2026-11-09)
 
-| ID | Decisión | Recomendación |
-|---|---|---|
-| D1 | Tecnología de la web | **Vite + React + TypeScript**, compilada a estáticos y servida por un contenedor **Nginx**. Las páginas legales se pre-renderizan como HTML (rápidas, indexables); el panel de administración es una SPA bajo `/admin`. |
-| D2 | Sesión del administrador en la web | Solo **token de acceso de 30 min en memoria** (sin refresh en el navegador): al recargar o tras 30 min, se vuelve a iniciar sesión. Más simple y más seguro para un panel con pocos usos. |
-| D3 | ¿Quién es administrador? | Columna `users.role` (`user` / `admin`). El primer admin se asigna por SQL en el servidor; no hay endpoint para auto-promoverse. |
-| D4 | Ocultar automáticamente por denuncias | Una reseña con **3 denuncias de usuarios distintos** se oculta hasta que un admin la revise. |
-| D5 | Inhabilitar cuenta (usuario) | Reversible: ocultar perfil y contenido; **volver a iniciar sesión la reactiva** (con confirmación). No sustituye a "Eliminar" (Google exige borrado real). |
-| D6 | Apelaciones | **Una** por baneo. Resolución del admin: *aceptar* (se levanta el baneo) o *rechazar* (definitivo). |
-
----
+| ID | Decisión |
+|---|---|
+| D1 | **Web con Vite + React + TypeScript**, compilada a estáticos y servida por un contenedor **Nginx**. Páginas legales pre-renderizadas como HTML; panel de administración como SPA bajo `/admin`. (Primera vez con estas herramientas: explicar cada pieza al construirla.) |
+| D2 | Sesión del administrador en la web: solo **token de acceso de 30 min en memoria**, sin refresh en el navegador. Al recargar o tras 30 min se vuelve a iniciar sesión. |
+| D3 | El administrador es **`test001`**: `users.role = 'admin'` asignado por SQL en el servidor (comprobar que la cuenta existe en producción). Ningún endpoint permite cambiar el rol. |
+| D4 | Una reseña con **3 denuncias de personas distintas** pasa a **privada de forma permanente** (`moderation_locked_at`): sale del feed y de las reseñas del libro, y su autor **no puede volver a hacerla pública**. Se **avisa al autor** (correo + aviso en la app). Solo un admin puede revertirlo (si descarta las denuncias). |
+| D5 | **Cuenta inhabilitada = suspendida = no puede entrar.** Dos orígenes: **manual** (un admin la banea) o **automático** (acumula **10 denuncias de personas distintas** sobre la cuenta o su contenido). En ambos casos la persona puede **exportar su biblioteca** y **apelar una vez**. No existe "inhabilitar mi cuenta" voluntario; sí "eliminar mi cuenta" (lo exige Google). |
+| D6 | **Una apelación** por suspensión. El admin la *acepta* (se reactiva la cuenta) o la *rechaza* (definitivo). |
 
 ## Modelo de datos (resumen)
 
 ```sql
 ALTER TABLE users
   ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user',
-  ADD COLUMN status ENUM('active','deactivated','banned') NOT NULL DEFAULT 'active',
+  ADD COLUMN status ENUM('active','suspended') NOT NULL DEFAULT 'active',
   ADD COLUMN status_changed_at BIGINT UNSIGNED NULL,
   ADD COLUMN terms_version VARCHAR(20) NULL,          -- versión aceptada (p. ej. '2026-11')
   ADD COLUMN terms_accepted_at DATETIME NULL;
 
-ALTER TABLE reading_logs ADD COLUMN hidden_at DATETIME NULL;   -- oculta por moderación
+ALTER TABLE reading_logs ADD COLUMN moderation_locked_at DATETIME NULL;  -- privada permanente (D4)
 
 CREATE TABLE user_blocks (blocker_id, blocked_id, created_at, PRIMARY KEY (blocker_id, blocked_id));
 
@@ -45,10 +43,14 @@ CREATE TABLE reports (
   UNIQUE (reporter_id, target_type, target_id)        -- una denuncia por persona y objetivo
 );
 
-CREATE TABLE bans (id, user_id, admin_id, reason VARCHAR(500), report_id NULL, created_at, lifted_at NULL);
+CREATE TABLE suspensions (id, user_id, source ENUM('admin','reports'), admin_id NULL,
+  reason VARCHAR(500), report_id NULL, created_at, lifted_at NULL);
 
-CREATE TABLE ban_appeals (id, ban_id UNIQUE, message VARCHAR(1000), status ENUM('pending','accepted',
-  'rejected'), admin_id NULL, admin_note VARCHAR(500) NULL, created_at, resolved_at NULL);
+CREATE TABLE suspension_appeals (id, suspension_id UNIQUE, message VARCHAR(1000), status ENUM('pending',
+  'accepted','rejected'), admin_id NULL, admin_note VARCHAR(500) NULL, created_at, resolved_at NULL);
+
+CREATE TABLE user_notices (id, user_id, type ENUM('reading_locked','suspended','appeal_resolved'),
+  payload JSON, created_at, read_at NULL);           -- avisos dentro de la app
 
 CREATE TABLE admin_actions (id, admin_id, action, target_type, target_id, note, created_at); -- auditoría
 
@@ -61,16 +63,17 @@ Todo con **migración idempotente** (`npm run migrate`) y en el setup de la BD d
 
 | Método y ruta | Quién | Para qué |
 |---|---|---|
-| `POST /account/deactivate` | usuario | Inhabilitar mi cuenta (revoca sesiones) |
 | `DELETE /account` | usuario | Eliminar mi cuenta (con contraseña) |
 | `POST /account/deletion-request` · `POST /account/deletion-confirm` | público (web) | Borrado por email + código de 6 dígitos |
 | `POST /account/terms` | usuario | Aceptar la versión vigente de los términos |
 | `POST /reports` | usuario | Denunciar reseña o usuario |
 | `GET/POST/DELETE /blocks` | usuario | Listar, bloquear, desbloquear |
-| `POST /appeals` | baneado (con `appeal_token`) | Enviar la única apelación |
+| `GET /account/notices` · `POST /account/notices/:id/read` | usuario | Avisos (reseña hecha privada, etc.) |
+| `GET /suspended/export` | suspendido (con `suspension_token`) | Exportar mi biblioteca (CSV y JSON) |
+| `POST /suspended/appeal` | suspendido (con `suspension_token`) | Enviar la única apelación |
 | `GET /admin/reports` · `POST /admin/reports/:id/resolve` | admin | Cola de denuncias y resolución |
-| `POST /admin/users/:id/ban` · `/unban` | admin | Banear / levantar baneo |
-| `POST /admin/readings/:id/hide` · `/unhide` | admin | Ocultar / mostrar reseña |
+| `POST /admin/users/:id/suspend` · `/reactivate` | admin | Banear / reactivar |
+| `POST /admin/readings/:id/lock` · `/unlock` | admin | Hacer privada permanente / revertir |
 | `GET /admin/appeals` · `POST /admin/appeals/:id/resolve` | admin | Apelaciones |
 | `GET /admin/stats` | admin | Contadores del panel |
 
@@ -106,24 +109,17 @@ Como plataforma, necesito que nadie publique sin aceptar los términos.
 
 ---
 
-## Épica 2 — Inhabilitar y eliminar la cuenta · *Prioridad 1*
+## Épica 2 — Eliminar la cuenta · *Prioridad 1*
 
-### 2.1 Inhabilitar mi cuenta (usuario) · M
-Como usuario, quiero tomarme un descanso sin perder mi biblioteca.
-- [ ] API: `POST /account/deactivate` (pide contraseña) → `status = 'deactivated'`, revoca refresh
-  tokens y marca `status_changed_at`; perfil, reseñas y "me gusta" dejan de verse para otros
-  (feed, reseñas por libro, perfiles, contadores).
-- [ ] Login de una cuenta inhabilitada → respuesta `409 ACCOUNT_DEACTIVATED`; la app pregunta
-  "¿Reactivar tu cuenta?" y al confirmar `POST /auth/login` con `reactivate: true` la reactiva.
-- [ ] App: Perfil → ⚙ → Cuenta → "Inhabilitar mi cuenta", con explicación y confirmación.
-- **Aceptación:** tras inhabilitar, otro usuario no encuentra nada de la cuenta; al volver, todo reaparece.
+> No hay "inhabilitar mi cuenta" voluntario (D5): inhabilitar es una sanción (Épica 4).
 
 ### 2.2 Eliminar mi cuenta desde la app · M
 Como usuario, quiero borrar mi cuenta y mis datos para siempre.
 - [ ] API: `DELETE /account` con contraseña (o código por email si en el futuro no tiene contraseña)
   → borra en transacción: lecturas, sesiones de lectura, metas, "me gusta" dados, bloqueos, denuncias
   hechas, refresh tokens, códigos; luego el usuario (`ON DELETE CASCADE` donde exista). Los libros
-  (catálogo compartido) no se borran.
+  (catálogo compartido) no se borran. Disponible también para cuentas suspendidas (desde la web, 2.3):
+  Google exige que cualquiera pueda borrar su cuenta.
 - [ ] App: Perfil → ⚙ → Cuenta → "Eliminar mi cuenta": pantalla que explica qué se borra, campo de
   contraseña y botón destructivo; al terminar, vuelve al Login con un aviso.
 - [ ] Test E2E: tras borrar, ningún rastro del usuario en ninguna tabla.
@@ -143,7 +139,15 @@ Google exige un enlace web para pedir el borrado.
 Como usuario, quiero avisar de contenido inapropiado.
 - [ ] API: `POST /reports` (`target_type`, `target_id`, `reason`, `details?`); 1 por persona y objetivo;
   no se puede denunciar a uno mismo; rate limit; correo al admin con el resumen (sin datos sensibles).
-- [ ] Ocultado automático (D4): 3 denuncias distintas abiertas sobre una reseña → `hidden_at = NOW()`.
+- [ ] **Privada permanente automática (D4):** 3 denuncias abiertas de personas distintas sobre una reseña →
+  `is_log_public = 0` + `moderation_locked_at = NOW()`; `PUT /readings/:id` con `is_log_public: true` en una
+  reseña bloqueada → `403 MODERATION_LOCKED`. Aviso al autor: correo + `user_notices`.
+- [ ] App: al abrir, si hay avisos sin leer, mostrar "Una de tus reseñas pasó a privada" con el libro y el
+  motivo; en el formulario de edición, el interruptor "Compartir en el feed" aparece deshabilitado y
+  explica por qué.
+- [ ] **Suspensión automática (D5):** al recibir una denuncia, contar personas distintas que denunciaron
+  a la cuenta o a su contenido (denuncias no descartadas); al llegar a **10** → suspender con
+  `source = 'reports'` (ver 4.2) y avisar al admin por correo.
 - [ ] App: menú **⋯** en cada tarjeta del feed, en reseñas de un libro y en perfiles públicos →
   "Denunciar" → hoja con motivos → confirmación "Gracias, lo revisaremos".
 - **Aceptación:** controles visibles y claramente etiquetados (requisito de Google); accesibles con TalkBack.
@@ -167,26 +171,38 @@ Como usuario, no quiero ver nada de una persona.
 - [ ] Rate limit propio para `/admin/*`; ningún endpoint permite cambiar `role`.
 - **Aceptación:** un usuario normal recibe 403 en todo `/admin/*` (test).
 
-### 4.2 Banear y levantar baneo · M
-Como administrador, quiero expulsar a quien incumple las reglas.
-- [ ] API: `POST /admin/users/:id/ban` (`reason`, `report_id?`) → `status = 'banned'`, fila en `bans`,
-  revoca todas las sesiones (refresh + `status_changed_at` para invalidar accesos vigentes), oculta su
-  contenido; `POST /admin/users/:id/unban`. No se puede banear a otro admin.
-- [ ] `protect` rechaza cuentas baneadas o inhabilitadas.
-- [ ] Login de una cuenta baneada → `403 ACCOUNT_BANNED` con `{ reason, banned_at, can_appeal, appeal_token }`
-  (`appeal_token`: JWT corto y de un solo propósito, solo si aún no apeló).
-- [ ] Correo al usuario: motivo y cómo apelar.
-- **Aceptación:** un baneado no puede usar la API de ninguna forma; su contenido no se ve.
+### 4.2 Suspender (banear) y reactivar · M
+Como administrador, quiero expulsar a quien incumple las reglas; y el sistema debe hacerlo solo ante
+abuso evidente (D5).
+- [ ] API: `POST /admin/users/:id/suspend` (`reason`, `report_id?`) y suspensión automática
+  (`source = 'reports'`) comparten la misma función: `status = 'suspended'`, fila en `suspensions`,
+  revoca todas las sesiones (refresh tokens + `status_changed_at` para invalidar accesos vigentes),
+  su contenido deja de verse. `POST /admin/users/:id/reactivate`. No se puede suspender a un admin.
+- [ ] `protect` rechaza cuentas suspendidas.
+- [ ] Login de una cuenta suspendida → `403 ACCOUNT_SUSPENDED` con
+  `{ reason, source, suspended_at, can_appeal, appeal_status, suspension_token }`
+  (`suspension_token`: JWT corto y de propósito único; solo sirve para exportar y apelar).
+- [ ] Correo al usuario: motivo, cómo exportar sus libros y cómo apelar.
+- **Aceptación:** una cuenta suspendida no puede usar la API normal de ninguna forma; su contenido no se ve.
 
-### 4.3 Apelar un baneo (una sola vez) · M
-Como usuario baneado, quiero pedir que se revise mi caso.
-- [ ] API: `POST /appeals` con `appeal_token` + `message` (≤ 1000) → `ban_appeals` (único por baneo);
-  segunda apelación → `409`.
-- [ ] App: al intentar iniciar sesión baneado, pantalla "Tu cuenta fue suspendida" con el motivo y
-  botón **Apelar** (si `can_appeal`) → formulario → "Recibimos tu apelación"; si ya apeló, muestra el estado.
+### 4.3 Exportar mi biblioteca estando suspendido · S
+Como usuario suspendido, quiero llevarme mis libros y mis pensamientos.
+- [ ] API: `GET /suspended/export?format=csv|json` con `suspension_token` → lecturas (título, autor,
+  ISBN, estado, fechas, página, calificación, reseña, pública/privada) y sesiones de lectura.
+- [ ] App: botón "Descargar mis libros" en la pantalla de cuenta suspendida (guardar/compartir el archivo).
+- [ ] Web: mismo botón en `/apelar`.
+- **Aceptación:** el archivo se abre en Excel/Sheets con tildes correctas (CSV UTF-8 con BOM).
+
+### 4.4 Apelar una suspensión (una sola vez) · M
+Como usuario suspendido, quiero pedir que se revise mi caso.
+- [ ] API: `POST /suspended/appeal` con `suspension_token` + `message` (≤ 1000) → `suspension_appeals`
+  (única por suspensión); segunda apelación → `409`.
+- [ ] App: al intentar iniciar sesión, pantalla "Tu cuenta está suspendida" con el motivo (y si fue
+  automática, que se debió a denuncias acumuladas), **Descargar mis libros** y **Apelar** (si
+  `can_appeal`) → formulario → "Recibimos tu apelación"; si ya apeló, muestra el estado.
 - [ ] Web: misma pantalla en `/apelar` (login → formulario).
 - [ ] Correo al usuario con la resolución.
-- **Aceptación:** exactamente una apelación por baneo; la decisión de rechazo es definitiva.
+- **Aceptación:** exactamente una apelación por suspensión; el rechazo es definitivo.
 
 ---
 
@@ -205,20 +221,23 @@ Como usuario baneado, quiero pedir que se revise mi caso.
 
 ### 5.2 Páginas públicas · S
 - [ ] `/` presentación breve de la app · `/terminos` · `/privacidad` · `/eliminar-cuenta` (2.3) ·
-  `/apelar` (4.3) · `/contacto`.
+  `/apelar` (4.3 y 4.4) · `/contacto`.
 - **Aceptación:** HTML estático accesible (contraste AA, navegable con teclado), funciona en móvil.
 
 ### 5.3 Panel de administración `/admin` · L
 Como administrador, quiero moderar desde el navegador.
 - [ ] Login (solo `role = admin`; D2) y cierre de sesión.
-- [ ] **Resumen**: denuncias abiertas, apelaciones pendientes, baneos activos, usuarios nuevos (7 días).
+- [ ] **Resumen**: denuncias abiertas, apelaciones pendientes, suspensiones activas (manuales y
+  automáticas), reseñas bloqueadas, usuarios nuevos (7 días).
 - [ ] **Denuncias**: lista filtrable (abiertas/resueltas, tipo, motivo), detalle con el contenido
-  denunciado y el historial del usuario; acciones: *Descartar*, *Ocultar reseña*, *Banear usuario*
-  (con motivo), cada una con confirmación y nota.
-- [ ] **Apelaciones**: pendientes con el baneo original y el mensaje; *Aceptar* / *Rechazar* con nota.
-- [ ] **Usuarios**: buscar por usuario/email, ver estado, banear / levantar baneo.
+  denunciado y el historial del usuario; acciones: *Descartar* (si la reseña estaba bloqueada por
+  denuncias, se puede *desbloquear*), *Hacer privada permanente*, *Suspender usuario* (con motivo),
+  cada una con confirmación y nota.
+- [ ] **Apelaciones**: pendientes con la suspensión original (manual o automática, con sus denuncias) y
+  el mensaje; *Aceptar* (reactiva) / *Rechazar* (definitivo) con nota.
+- [ ] **Usuarios**: buscar por usuario/email, ver estado y denuncias recibidas, suspender / reactivar.
 - [ ] **Auditoría**: listado de `admin_actions`.
-- **Aceptación:** todo el flujo denuncia → baneo → apelación → resolución se puede hacer sin SQL.
+- **Aceptación:** todo el flujo denuncia → privada / suspensión → apelación → resolución se hace sin SQL.
 
 ---
 
@@ -259,8 +278,8 @@ Como administrador, quiero moderar desde el navegador.
 | Sprint | Contenido | Resultado |
 |---|---|---|
 | **1** | D1–D6 · 1.1 · 1.2 · 4.1 · 5.1 · 5.2 | Web nueva en `lectorapp.nacholoz3d.cl` con términos y privacidad publicados |
-| **2** | 1.3 · 2.1 · 2.2 · 2.3 | Aceptación de términos, inhabilitar y eliminar (app + web) |
-| **3** | 3.1 · 3.2 · 4.2 · 4.3 | Denunciar, bloquear, banear y apelar |
+| **2** | 1.3 · 2.2 · 2.3 | Aceptación de términos y eliminar la cuenta (app + web) |
+| **3** | 3.1 · 3.2 · 4.2 · 4.3 · 4.4 | Denunciar, bloquear, reseñas privadas, suspensión (manual y automática), exportar y apelar |
 | **4** | 5.3 | Panel de administración completo |
 | **5** | 6.1 · 6.2 · 6.3 | Datos protegidos |
 | **6** | Épica 7 | App enviada a prueba cerrada en Google Play |
