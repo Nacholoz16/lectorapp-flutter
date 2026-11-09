@@ -239,15 +239,15 @@ Como usuario suspendido, quiero pedir que se revise mi caso.
 
 ## Épica 5 — Web lectorapp.nacholoz3d.cl · *Prioridad 1 (base) / 2 (panel)*
 
-### 5.1 Reemplazar el front viejo por la web nueva · M
+### 5.1 Reemplazar el front viejo por la web nueva · M · *parte local hecha; servidor pendiente*
 - [ ] Respaldar el servicio `frontend` actual (`lectorFront`, Ionic/Angular) y su configuración en
   `backups/` del servidor; **eliminar** el contenedor y su servicio del `docker-compose.yml`.
-- [ ] Nuevo repo `lectorapp-web` (D1), con el diseño de la app (tokens de color, Lora + Nunito,
+- [x] Nuevo repo `lectorapp-web` (D1), con el diseño de la app (tokens de color, Lora + Nunito,
   modo claro/oscuro). Contenedor **Nginx** que sirve los estáticos; cabeceras de seguridad
   (HSTS, CSP, `X-Content-Type-Options`, `Referrer-Policy`).
 - [ ] Nginx Proxy Manager: `lectorapp.nacholoz3d.cl` → nuevo contenedor, con certificado TLS.
-- [ ] API: agregar `https://lectorapp.nacholoz3d.cl` a CORS.
-- [ ] Deploy con un `deploy.bat` como el de la API (git pull + build + recrear solo ese contenedor).
+- [x] API: agregar `https://lectorapp.nacholoz3d.cl` a CORS.
+- [x] Deploy con un `deploy.bat` como el de la API (git pull + build + recrear solo ese contenedor).
 - **Aceptación:** la web carga por HTTPS con nota A en las cabeceras de seguridad; la API y la BD no se reinician.
 
 ### 5.2 Páginas públicas · S
