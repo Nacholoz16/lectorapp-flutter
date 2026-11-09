@@ -351,4 +351,4 @@ y los secretos están en `~/[LECTORAPP]/.env` (fuera de git). El front web viejo
 
 ## 9. Pendientes Conocidos
 
-La lista viva está en [`PENDIENTES.md`](PENDIENTES.md): tareas de antes de publicar (rotar clave de ZeptoMail, firma de release, contraseña root de MySQL, bundle ID de iOS), de código (refresh tokens, modelos tipados en el feed, FULLTEXT en la búsqueda, dependencias) y de diseño. Actualizarla al cerrar o descubrir tareas.
+El trabajo planificado de la 1.1.0 está en [`BACKLOG.md`](BACKLOG.md). La lista de tareas no bloqueantes está en [`PENDIENTES.md`](PENDIENTES.md): tareas de antes de publicar (rotar clave de ZeptoMail, firma de release, bundle ID de iOS), de código (refresh tokens, modelos tipados en el feed, FULLTEXT en la búsqueda, dependencias) y de diseño. Actualizarla al cerrar o descubrir tareas.

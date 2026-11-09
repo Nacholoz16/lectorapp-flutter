@@ -1,6 +1,7 @@
 # Pendientes de LectorApp
 
 Tareas conocidas que **no bloquean el desarrollo** y se retoman más adelante.
+El trabajo planificado de la versión 1.1.0 (Google Play, moderación, web, cifrado) está en [`BACKLOG.md`](BACKLOG.md).
 Última revisión: 2026-11-08.
 
 ## Antes de publicar (no urgentes mientras estemos en desarrollo)
@@ -14,9 +15,6 @@ Tareas conocidas que **no bloquean el desarrollo** y se retoman más adelante.
   Crear un keystore propio y configurar `signingConfigs.release` antes de subir a Google Play
   ([guía de Flutter](https://docs.flutter.dev/deployment/android#sign-the-app)).
   El keystore y sus contraseñas **nunca** van al repositorio.
-- [ ] **Contraseña root de MySQL en producción.** Tiene 5 caracteres. La BD solo escucha en `127.0.0.1`,
-  así que el riesgo es bajo, pero conviene cambiarla por una larga y aleatoria (`.env` del servidor →
-  `MYSQL_ROOT_PASSWORD` + `ALTER USER 'root'@...` dentro de `lectorDB`; respaldar antes).
 - [ ] **Bundle ID de iOS.** Sigue siendo `com.example.helloWorld` (plantilla). Cambiarlo a
   `com.nacholoz3d.lectorapp` (como Android) en `ios/Runner.xcodeproj` antes de compilar para iPhone.
 
