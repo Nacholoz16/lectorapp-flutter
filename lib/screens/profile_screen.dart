@@ -8,6 +8,7 @@ import '../services/terms_service.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
 import 'deactivate_account_screen.dart';
+import 'delete_account_screen.dart';
 import 'login_screen.dart';
 import '../widgets/reading_timer_modal.dart';
 import '../services/theme_service.dart';
@@ -323,7 +324,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  /// ⚙ → Cuenta. Acciones sobre la cuenta; la tarea 2.2 suma aquí "Eliminar mi cuenta".
+  /// ⚙ → Cuenta. Desactivar (2.1, reversible) y eliminar (2.2, para siempre).
   void _onOpenAccountSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -346,6 +347,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Navigator.pop(sheetContext);
                 unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => const DeactivateAccountScreen(),
+                )));
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_forever_outlined, color: context.lector.danger),
+              title: Text('Eliminar mi cuenta',
+                  style: TextStyle(color: context.lector.danger)),
+              subtitle: const Text('Borra tu cuenta y tus datos para siempre'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const DeleteAccountScreen(),
                 )));
               },
             ),

@@ -144,16 +144,16 @@ Como usuario, quiero tomarme un descanso: ocultar mi perfil sin perder mi biblio
 - **Aceptación:** desactivar y reactivar dejan cada lectura exactamente como estaba; el usuario siempre
   sabe qué va a pasar antes de confirmar.
 
-### 2.2 Eliminar mi cuenta desde la app · M
+### 2.2 Eliminar mi cuenta desde la app · M · *hecha; API pendiente de desplegar*
 Como usuario, quiero borrar mi cuenta y mis datos para siempre.
-- [ ] API: `DELETE /account` con contraseña (o código por email si en el futuro no tiene contraseña)
+- [x] API: `DELETE /account` con contraseña (o código por email si en el futuro no tiene contraseña)
   → borra en transacción: lecturas, sesiones de lectura, metas, "me gusta" dados, bloqueos, denuncias
   hechas, refresh tokens, códigos; luego el usuario (`ON DELETE CASCADE` donde exista). Los libros
   (catálogo compartido) no se borran. Disponible también para cuentas suspendidas (desde la web, 2.3):
   Google exige que cualquiera pueda borrar su cuenta.
-- [ ] App: Perfil → ⚙ → Cuenta → "Eliminar mi cuenta": pantalla que explica qué se borra, campo de
+- [x] App: Perfil → ⚙ → Cuenta → "Eliminar mi cuenta": pantalla que explica qué se borra, campo de
   contraseña y botón destructivo; al terminar, vuelve al Login con un aviso.
-- [ ] Test E2E: tras borrar, ningún rastro del usuario en ninguna tabla.
+- [x] Test E2E: tras borrar, ningún rastro del usuario en ninguna tabla.
 - **Aceptación:** borrado real (no desactivación), irreversible y avisado.
 
 ### 2.3 Solicitar eliminación desde la web · M · *depende de Épica 5*

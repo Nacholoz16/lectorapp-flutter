@@ -39,6 +39,10 @@ void main() {
         expectAtLeast('onInk sobre ink', c.onInk, c.ink, 4.5);
       });
 
+      test('botón destructivo: onInk sobre danger ≥ 4.5:1 (Eliminar mi cuenta)', () {
+        expectAtLeast('onInk sobre danger', c.onInk, c.danger, 4.5);
+      });
+
       test('colores de estado legibles sobre la tarjeta', () {
         expectAtLeast('success', c.success, p.card, 4.5);
         expectAtLeast('danger', c.danger, p.card, 4.5);

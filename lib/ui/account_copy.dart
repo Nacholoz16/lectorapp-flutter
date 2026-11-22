@@ -1,4 +1,4 @@
-/// Textos de desactivar / reactivar la cuenta (tarea 2.1). Funciones puras para poder probar
+/// Textos de desactivar / reactivar (tarea 2.1) y eliminar (2.2) la cuenta. Funciones puras para poder probar
 /// singulares, plurales y el caso 0, y para que la pantalla de desactivar, la de cuenta
 /// desactivada y los avisos digan lo mismo con las mismas palabras.
 library;
@@ -43,3 +43,6 @@ String deactivatedMessage(int hidden) {
   }
   return 'Tu cuenta está desactivada. Tus $hidden lecturas públicas ahora son privadas.';
 }
+
+/// Aviso en Login después de eliminar la cuenta (tarea 2.2).
+const accountDeletedMessage = 'Tu cuenta y tus datos se eliminaron. Gracias por leer con nosotros.';

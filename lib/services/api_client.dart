@@ -133,7 +133,9 @@ class ApiClient {
   Future<dynamic> put(String path, {Map<String, dynamic>? body}) =>
       _send('PUT', path, body: body);
 
-  Future<dynamic> delete(String path) => _send('DELETE', path);
+  /// [body]: solo para los DELETE que lo necesitan (p. ej. eliminar la cuenta con contraseña).
+  Future<dynamic> delete(String path, {Map<String, dynamic>? body}) =>
+      _send('DELETE', path, body: body);
 
   // ─── Implementación ───────────────────────────────────────────────────────
 

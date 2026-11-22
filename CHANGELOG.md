@@ -11,6 +11,9 @@
 - **Desactivar y reactivar tu cuenta** (Perfil → ⚙ → Cuenta): tus lecturas públicas pasan a privadas y
   tu perfil queda oculto; puedes entrar y ver tu biblioteca en modo lectura. Al volver, todo regresa
   como estaba (salvo lo bloqueado por moderación).
+- **Eliminar tu cuenta** (Perfil → ⚙ → Cuenta, también desde el modo desactivado): con contraseña y
+  confirmación borra la cuenta y todos sus datos, y limpia del teléfono la sesión, el feed guardado
+  y los borradores.
 
 ### API
 - `accept_terms: true` obligatorio en el registro; `POST /account/terms`; publicar sin la versión
@@ -19,11 +22,13 @@
 - `GET /account/status`, `POST /account/deactivate` (con contraseña), `POST /account/reactivate`;
   códigos `403 ACCOUNT_DEACTIVATED` y `401 INVALID_PASSWORD`; `status` en el usuario; `protect`
   cerrado por defecto para cuentas no activas (migración paso 10).
+- `DELETE /account` (con contraseña): borrado transaccional reutilizable (`deleteUserCompletely`),
+  sin migración; la auditoría `admin_actions` se conserva anonimizada.
 - Rol de administrador y tabla de auditoría `admin_actions` (base para la moderación).
 - CORS para la web nueva `https://lector.nacholoz3d.cl`.
 
 ### Técnico
-- Nueva dependencia `url_launcher`. 90 tests en la app, 117 en la API.
+- Nueva dependencia `url_launcher`. 105 tests en la app, 131 en la API.
 
 ## 1.0.0 — 2026-11-08
 

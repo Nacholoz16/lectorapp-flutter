@@ -9,6 +9,7 @@ import '../services/theme_service.dart';
 import '../theme/lector_colors.dart';
 import '../ui/account_copy.dart';
 import '../ui/feedback.dart';
+import 'delete_account_screen.dart';
 import 'library_screen.dart';
 import 'login_screen.dart';
 
@@ -16,9 +17,9 @@ import 'login_screen.dart';
 ///
 /// Lo muestra `TabsScreen` en lugar de las pestañas mientras `AccountService().isDeactivated`
 /// sea `true`. Solo la biblioteca (sin añadir, editar ni cronómetro), con un aviso arriba y las
-/// acciones "Reactivar mi cuenta" y "Cerrar sesión". Solo llama a endpoints que la API permite
-/// con la cuenta desactivada (biblioteca, estadísticas de sus libros, estado, reactivar, logout),
-/// así que nunca provoca otro `403 ACCOUNT_DEACTIVATED`.
+/// acciones "Reactivar mi cuenta", "Cerrar sesión" y "Eliminar mi cuenta" (2.2). Solo llama a
+/// endpoints que la API permite con la cuenta desactivada (biblioteca, estadísticas de sus libros,
+/// estado, reactivar, logout, eliminar), así que nunca provoca otro `403 ACCOUNT_DEACTIVATED`.
 class DeactivatedScreen extends StatefulWidget {
   const DeactivatedScreen({super.key});
 
@@ -104,6 +105,12 @@ class _DeactivatedScreenState extends State<DeactivatedScreen> {
     ));
   }
 
+  void _openDelete() {
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => const DeleteAccountScreen(),
+    )));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.lector;
@@ -140,6 +147,7 @@ class _DeactivatedScreenState extends State<DeactivatedScreen> {
         busy: _busy,
         onReactivate: _reactivate,
         onLogout: _logout,
+        onDelete: _openDelete,
       ),
     );
   }
@@ -150,11 +158,13 @@ class _DeactivatedBanner extends StatelessWidget {
   final bool busy;
   final VoidCallback onReactivate;
   final VoidCallback onLogout;
+  final VoidCallback onDelete;
 
   const _DeactivatedBanner({
     required this.busy,
     required this.onReactivate,
     required this.onLogout,
+    required this.onDelete,
   });
 
   @override
@@ -214,6 +224,17 @@ class _DeactivatedBanner extends StatelessWidget {
               ),
               icon: const Icon(Icons.logout),
               label: const Text('Cerrar sesión'),
+            ),
+            // Discreto a propósito (la acción principal aquí es volver), pero siempre a mano:
+            // una cuenta desactivada también debe poder eliminarse.
+            TextButton.icon(
+              onPressed: busy ? null : onDelete,
+              style: TextButton.styleFrom(
+                foregroundColor: c.textSecondary,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              icon: const Icon(Icons.delete_forever_outlined),
+              label: const Text('Eliminar mi cuenta'),
             ),
           ],
         ),

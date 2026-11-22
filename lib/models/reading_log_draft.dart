@@ -77,7 +77,9 @@ class ReadingLogDraft {
 class ReadingLogDraftStore {
   ReadingLogDraftStore._();
 
-  static String _key(String id) => 'reading_draft_$id';
+  static const _prefix = 'reading_draft_';
+
+  static String _key(String id) => '$_prefix$id';
 
   static Future<ReadingLogDraft?> load(String id) async {
     try {
@@ -98,5 +100,15 @@ class ReadingLogDraftStore {
   static Future<void> clear(String id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key(id));
+  }
+
+  /// Borra TODOS los borradores del teléfono. Al cerrar sesión se conservan a propósito (son de
+  /// quien usa el teléfono), pero al eliminar la cuenta se van: guardan reseñas y notas.
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith(_prefix)).toList();
+    for (final key in keys) {
+      await prefs.remove(key);
+    }
   }
 }

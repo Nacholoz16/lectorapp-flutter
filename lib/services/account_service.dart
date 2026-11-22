@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
+import '../models/reading_log_draft.dart';
 import '../utils/json_utils.dart';
 import 'api_client.dart';
 
@@ -122,6 +123,28 @@ class AccountService {
       if (info.isDeactivated) rethrow;
       return 0;
     }
+  }
+
+  /// Elimina la cuenta y todos sus datos para siempre (tarea 2.2), confirmando con la
+  /// contraseña. Funciona también con la cuenta desactivada.
+  ///
+  /// Contraseña incorrecta → [ApiException] con `isInvalidPassword`: la sesión y los datos del
+  /// teléfono quedan intactos. Si la API confirma el borrado, se limpia el teléfono
+  /// ([clearLocalDataAfterDeletion]); quien llama navega a Login.
+  Future<void> deleteAccount(String password) async {
+    await _api.delete('/account', body: {'password': password});
+    await clearLocalDataAfterDeletion();
+  }
+
+  /// Lo que se borra del teléfono al eliminar la cuenta:
+  /// - la sesión (tokens), `user-data` y la caché del feed → `ApiClient.clearSession`;
+  /// - los borradores de lecturas (`reading_draft_*`): guardan reseñas y notas de la cuenta.
+  ///
+  /// Se conservan el tema (`app_theme`) y la vista del feed (`feed_layout`): son preferencias
+  /// del teléfono, no datos de la cuenta, y no identifican a nadie (igual que al cerrar sesión).
+  Future<void> clearLocalDataAfterDeletion() async {
+    await _api.clearSession();
+    await ReadingLogDraftStore.clearAll();
   }
 
   /// Red de seguridad: la API respondió `403 ACCOUNT_DEACTIVATED` a alguna petición. Se pasa a

@@ -126,7 +126,7 @@ test_lectorapp/
 │   │   ├── api_client.dart           # Singleton HTTP: sesión, refresh automático, errores → ApiException
 │   │   ├── auth_service.dart         # login / register / forgot / reset / logout / isJwtValid
 │   │   ├── terms_service.dart        # Estado de aceptación de términos (user-data) y POST /account/terms
-│   │   ├── account_service.dart      # Estado de la cuenta (isDeactivated), /account/status, desactivar, reactivar
+│   │   ├── account_service.dart      # Estado de la cuenta (isDeactivated), /account/status, desactivar, reactivar, eliminar
 │   │   ├── reading_service.dart      # Feed, caché, CRUD de lecturas, likes, sesiones, stats; libraryChanges
 │   │   ├── user_service.dart         # Perfil, biblioteca de un usuario, stats, meta, privacidad
 │   │   ├── book_service.dart         # Búsqueda y reseñas por libro (NO es singleton)
@@ -135,13 +135,14 @@ test_lectorapp/
 │   │   ├── display_mode_service.dart # 90/120 Hz tras el primer frame y en cada onResume
 │   │   └── timer_background_service.dart # onStart (isolate) + fachada estática TimerBackgroundService
 │   ├── ui/feedback.dart              # showSuccess / showError / friendlyError / unawaitedHaptic
-│   ├── ui/account_copy.dart          # Textos de desactivar/reactivar (singular, plural y 0)
+│   ├── ui/account_copy.dart          # Textos de desactivar/reactivar (singular, plural y 0) y aviso de cuenta eliminada
 │   ├── utils/json_utils.dart         # asBool / asInt
 │   ├── screens/
 │   │   ├── login_screen.dart · register_screen.dart · forgot_password_screen.dart
 │   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar; TabsScreen.select(context, i); DeactivatedScreen si la cuenta está desactivada
-│   │   ├── deactivated_screen.dart   # Modo solo lectura: biblioteca + aviso, "Reactivar mi cuenta", "Cerrar sesión"
+│   │   ├── deactivated_screen.dart   # Modo solo lectura: biblioteca + aviso, "Reactivar mi cuenta", "Cerrar sesión", "Eliminar mi cuenta"
 │   │   ├── deactivate_account_screen.dart # Perfil → ⚙ → Cuenta → Desactivar (explicación, contraseña, confirmación)
+│   │   ├── delete_account_screen.dart # Perfil → ⚙ → Cuenta → Eliminar (qué se borra, alternativa desactivar, contraseña, confirmación)
 │   │   ├── home_screen.dart          # Tab 0: saludo plegable, barra de búsqueda, "Sigues leyendo", feed
 │   │   ├── library_screen.dart       # Tab 1: Mi biblioteca (filtros, contadores, cronómetro); readOnly para la cuenta desactivada
 │   │   ├── profile_screen.dart       # Tab 2: reto anual, estadísticas, ajustes (⚙)
@@ -160,7 +161,7 @@ test_lectorapp/
 │       ├── star_rating_input.dart    # Estrellas 0–5 accesibles
 │       ├── state_views.dart          # EmptyState / ErrorState
 │       └── book_loader.dart          # Loader animado (páginas de un libro)
-└── test/                             # 7 archivos, 90 tests (ver §10)
+└── test/                             # 8 archivos, 105 tests (ver §10)
 ```
 
 `.vscode/` (configuraciones de ejecución y la tarea `adb reverse`) **está en `.gitignore`**: existe en
@@ -256,9 +257,11 @@ igual cierra la sesión local).
 
 **Términos (`TermsService`)** — el estado de aceptación llega en el `user` de login/registro/reset y en el perfil propio (`ProfileScreen` lo guarda tras cargarlo, así las sesiones de la 1.0.0 también lo conocen). Es solo una pista: la API decide. Registro: casilla `TermsCheckbox` obligatoria (sin marcar por defecto). Perfil → ⚙ → *Legal* abre ambos documentos con `openLegalDocument`.
 
-**Cuenta (2.1, `AccountService`)** — Perfil → ⚙ → *Cuenta* (hoja con "Desactivar mi cuenta"; la 2.2 sumará "Eliminar mi cuenta") → `DeactivateAccountScreen`: pide `GET /account/status` para decir *antes* cuántas lecturas públicas pasarán a privadas, contraseña (`401 INVALID_PASSWORD` se muestra junto al campo, sin cerrar la sesión) y diálogo de confirmación → `POST /account/deactivate` → `isDeactivated = true`, vuelve a la raíz con un aviso.
+**Cuenta (2.1, `AccountService`)** — Perfil → ⚙ → *Cuenta* (hoja con "Desactivar mi cuenta" y "Eliminar mi cuenta") → `DeactivateAccountScreen`: pide `GET /account/status` para decir *antes* cuántas lecturas públicas pasarán a privadas, contraseña (`401 INVALID_PASSWORD` se muestra junto al campo, sin cerrar la sesión) y diálogo de confirmación → `POST /account/deactivate` → `isDeactivated = true`, vuelve a la raíz con un aviso.
 
-**Cuenta desactivada (modo solo lectura)** — `TabsScreen` muestra `DeactivatedScreen` = `LibraryScreen(readOnly: true)` con un `AppBar` fijo "Cuenta desactivada" + botón **Reactivar** (sin añadir, editar, buscar ni cronómetro; las estadísticas de cada libro sí, la API las permite) + aviso fijo arriba "Tu cuenta está desactivada" con **Reactivar mi cuenta** y **Cerrar sesión**. Al abrirse consulta `GET /account/status` (si se reactivó en otro teléfono, vuelve sola a las pestañas). Reactivar: `GET /account/status` → diálogo con "Tus N lecturas que eran públicas volverán a ser públicas" → `POST /account/reactivate` → aviso "Volvieron a ser públicas N lecturas" y vuelven las 3 pestañas (se crean de nuevo y recargan sus datos). Se entra en este modo al arrancar (`user-data`), al iniciar sesión (`user.status`), tras desactivar o por la red de seguridad del `403 ACCOUNT_DEACTIVATED`. Solo llama a endpoints permitidos, así que no puede provocar otro 403.
+**Cuenta desactivada (modo solo lectura)** — `TabsScreen` muestra `DeactivatedScreen` = `LibraryScreen(readOnly: true)` con un `AppBar` fijo "Cuenta desactivada" + botón **Reactivar** (sin añadir, editar, buscar ni cronómetro; las estadísticas de cada libro sí, la API las permite) + aviso fijo arriba "Tu cuenta está desactivada" con **Reactivar mi cuenta** y **Cerrar sesión**. Al abrirse consulta `GET /account/status` (si se reactivó en otro teléfono, vuelve sola a las pestañas). Reactivar: `GET /account/status` → diálogo con "Tus N lecturas que eran públicas volverán a ser públicas" → `POST /account/reactivate` → aviso "Volvieron a ser públicas N lecturas" y vuelven las 3 pestañas (se crean de nuevo y recargan sus datos). Se entra en este modo al arrancar (`user-data`), al iniciar sesión (`user.status`), tras desactivar o por la red de seguridad del `403 ACCOUNT_DEACTIVATED`. Solo llama a endpoints permitidos, así que no puede provocar otro 403. El aviso ofrece además **Eliminar mi cuenta** (discreto, en `textSecondary`).
+
+**Eliminar la cuenta (2.2)** — Perfil → ⚙ → *Cuenta* → **Eliminar mi cuenta** (o desde el modo solo lectura) → `DeleteAccountScreen`: explica qué se borra (lecturas, reseñas, sesiones, reto, "me gusta" dados y recibidos, perfil y sesiones; los libros del catálogo no), y si la cuenta está activa ofrece "¿Solo quieres un descanso?" → `DeactivateAccountScreen` (reemplaza la pantalla). Contraseña + diálogo "¿Eliminar tu cuenta para siempre?" (botón "Eliminar para siempre" en `danger`) → `AccountService().deleteAccount(password)` = `DELETE /account` → `clearLocalDataAfterDeletion()` (= `clearSession()` + `ReadingLogDraftStore.clearAll()`; se conservan `app_theme` y `feed_layout`, que son del teléfono) → `pushAndRemoveUntil(LoginScreen)` con el aviso "Tu cuenta y tus datos se eliminaron…". `401 INVALID_PASSWORD` → error junto al campo, sesión y teléfono intactos. El botón principal es `FilledButton` con fondo `danger` y texto `onInk` (contraste en `theme_contrast_test`).
 
 **Biblioteca (`LibraryScreen`)** — carga la biblioteca **completa** (`my-library` en páginas de 50, tope de 20 páginas) para que filtros y contadores sean exactos en cliente. Filtros `leyendo` / `terminado` / `abandonado` con `SegmentedButton`; si no hay nada "leyendo" abre en el primer filtro con libros. Tarjeta "Empezar a leer" → `ReadingTimerModal`.
 
@@ -280,7 +283,7 @@ igual cierra la sesión local).
 | SharedPreferences | `feed_layout` | `cards` \| `compact` |
 | SharedPreferences | `reading_draft_<id>` | Borrador de formulario (uno por libro o registro) |
 
-No hay base de datos local. Los borradores y preferencias **no** se borran al cerrar sesión.
+No hay base de datos local. Los borradores y preferencias **no** se borran al cerrar sesión. Al **eliminar la cuenta** (2.2) se borran sesión, `user-data`, `cached_global_feed` y todos los `reading_draft_*`; `app_theme` y `feed_layout` se conservan (son del teléfono, no de la cuenta).
 
 ### 4.7 Cronómetro en segundo plano
 
@@ -375,7 +378,8 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min. Desactivar: 5 con
 - `GET /status` — `{ status, status_changed_at, public_readings, restorable_readings }`: lecturas públicas ahora / las que volverán a ser públicas al reactivar (sin las bloqueadas por moderación).
 - `POST /deactivate` — `{ password }` → `{ status: 'deactivated', hidden_readings }`. En una transacción guarda la visibilidad de **cada** lectura (`public_before_deactivation`) y las deja todas privadas. Contraseña incorrecta → `401 INVALID_PASSWORD` (nada cambia). Ya desactivada → `409` (no pisa la visibilidad guardada).
 - `POST /reactivate` — sin body ni contraseña → `{ status: 'active', restored_readings }`. Cada lectura vuelve a su visibilidad anterior salvo las que tengan `moderation_locked_at` (siguen privadas). No exige los términos vigentes (restaura, no publica). Ya activa → `409`.
-- **Con la cuenta desactivada** solo responden: `GET /readings/my-library`, `GET /readings/:id/stats` (solo de **sus** lecturas), `GET /account/status`, `POST /account/reactivate`, `POST /account/deactivate` (→ 409) y `/auth/*`. Todo lo demás → `403 ACCOUNT_DEACTIVATED`. Para los demás usuarios su perfil, biblioteca y stats responden `404` (igual que un usuario inexistente), no aparece en el feed ni en `/books/feed`, y sus "me gusta" dejan de contar en `likes_count` y `total_likes` (no se borran; vuelven al reactivar).
+- `DELETE /` — `{ password }` → `200 { deleted: true }` (200 con cuerpo, no 204: el cliente confirma el borrado). Borra en **una transacción** la cuenta y todo lo suyo: lecturas (con reseñas), "me gusta" dados **y** recibidos, sesiones del cronómetro, metas, refresh tokens y códigos de recuperación; en `admin_actions` las filas se conservan con `admin_id`/`target_id` en `NULL` si apuntaban a la cuenta o a sus lecturas. Los libros no se borran. Funciona con la cuenta activa, desactivada o suspendida. Revoca el token de acceso usado (blacklist); los de otros dispositivos dejan de valer porque el usuario ya no existe (401). Contraseña incorrecta → `401 INVALID_PASSWORD` (nada cambia; comparte con `/deactivate` el límite de 5 fallos por cuenta / 15 min). Dos borrados simultáneos → uno `200`, el otro `401`. Username y email quedan libres. La lógica es `deleteUserCompletely(userId, conn)` (`src/services/accountDeletion.service.js`), reutilizable por la web (2.3); **toda tabla nueva con datos de un usuario se registra ahí**.
+- **Con la cuenta desactivada** solo responden: `GET /readings/my-library`, `GET /readings/:id/stats` (solo de **sus** lecturas), `GET /account/status`, `POST /account/reactivate`, `POST /account/deactivate` (→ 409), `DELETE /account` y `/auth/*`. Todo lo demás → `403 ACCOUNT_DEACTIVATED`. Para los demás usuarios su perfil, biblioteca y stats responden `404` (igual que un usuario inexistente), no aparece en el feed ni en `/books/feed`, y sus "me gusta" dejan de contar en `likes_count` y `total_likes` (no se borran; vuelven al reactivar).
 
 **Libros (`/books`)**
 - `GET /search?q=` — caché MySQL + Open Library (cacheado 10 min en el servidor) → `{ data: [...] }`.
@@ -463,7 +467,7 @@ backend/deploy/            # deploy.bat (plink) + remote-deploy.sh; ver backend/
 ```bash
 flutter pub get
 flutter analyze            # debe quedar "No issues found!"
-flutter test               # 90 tests
+flutter test               # 105 tests
 
 # --- Contra la API LOCAL (../Lectorapp API con `npm run dev`, puerto 3000) ---
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000/api                    # emulador Android
@@ -518,12 +522,13 @@ solo con confirmación explícita del usuario.**
 | `test/api_client_refresh_test.dart` | Renovación antes de pedir, reintento tras 401, renovación única compartida, refresh rechazado cierra sesión, 503 no la cierra, margen de 30 s. |
 | `test/models_and_utils_test.dart` | `asBool`, `UserProfile.fromJson`, `ReadingLog.fromJson`, `AuthService.isJwtValid`, `ApiClient.extractErrorMessage`. |
 | `test/reading_log_form_test.dart` | `ReadingLogDraft` (igualdad, JSON, store) y `StarRatingInput` (toque, semántica, tamaño táctil). |
-| `test/theme_contrast_test.dart` | Contraste WCAG de las 4 paletas. |
+| `test/theme_contrast_test.dart` | Contraste WCAG de las 4 paletas (incluido `onInk` sobre `danger`, botón destructivo). |
 | `test/display_mode_service_test.dart` | `DisplayModeService.pickBestMode`. |
 | `test/terms_test.dart` | `TermsService` (necesita aceptar, guardar estado, `accept`), `ApiException.code`/`isTermsRequired`, registro con `accept_terms`, `TermsCheckbox` (semántica, 48 dp) y la hoja "Antes de compartir…" (incluido que no se cierra durante la petición). |
+| `test/account_deletion_test.dart` | `ReadingLogDraftStore.clearAll`, limpieza del teléfono tras eliminar (se quedan tema y vista), `deleteAccount` (DELETE con contraseña; `INVALID_PASSWORD` y 500 no tocan sesión ni datos), `DeleteAccountScreen` (explicación, alternativa desactivar solo si está activa, botón `danger`, contraseña incorrecta junto al campo, cancelar no envía nada, éxito → Login con aviso) y la entrada desde `DeactivatedScreen`. |
 | `test/account_deactivation_test.dart` | Textos de `account_copy`, parseo de `status`/`AccountStatusInfo`, `user-data` y login con `status`, red de seguridad del `403 ACCOUNT_DEACTIVATED` (una vez, cierra pantallas apiladas), `401 INVALID_PASSWORD` sin renovar ni cerrar sesión, desactivar/reactivar (incluido 409), `TabsScreen` en modo solo lectura, `DeactivatedScreen` (reactivar con confirmación) y `DeactivateAccountScreen` (contraseña incorrecta junto al campo). |
 
-Salvo `DeactivatedScreen` y `DeactivateAccountScreen`, no hay tests de pantallas completas ni de integración en la app. Para testear servicios, inyectar un
+Salvo `DeactivatedScreen`, `DeactivateAccountScreen` y `DeleteAccountScreen`, no hay tests de pantallas completas ni de integración en la app. Para testear servicios, inyectar un
 `MockClient` en `ApiClient` y usar `SharedPreferences.setMockInitialValues`.
 
 ---
