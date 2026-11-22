@@ -2,7 +2,7 @@
 
 Tareas conocidas que **no bloquean el desarrollo** y se retoman más adelante.
 El trabajo planificado de la versión 1.1.0 (Google Play, moderación, web, cifrado) está en [`BACKLOG.md`](BACKLOG.md).
-Última revisión: 2026-11-08.
+Última revisión: 2026-11-22.
 
 ## Antes de publicar (no urgentes mientras estemos en desarrollo)
 
@@ -15,6 +15,18 @@ El trabajo planificado de la versión 1.1.0 (Google Play, moderación, web, cifr
   Crear un keystore propio y configurar `signingConfigs.release` antes de subir a Google Play
   ([guía de Flutter](https://docs.flutter.dev/deployment/android#sign-the-app)).
   El keystore y sus contraseñas **nunca** van al repositorio.
+- [ ] **Crear el buzón `contacto@nacholoz3d.cl`** en Zoho Mail: es el único contacto de Términos, Privacidad y `/contacto`.
+- [ ] **Avatares y fuentes sin terceros.** La app pide avatares a DiceBear con el username (Play lo cuenta como
+  compartir un ID de usuario) y descarga Google Fonts en tiempo de ejecución (Google recibe la IP). Generar
+  avatares en el dispositivo y empaquetar Lora/Nunito (`GoogleFonts.config.allowRuntimeFetching = false`);
+  luego quitarlo de la Política de privacidad y del formulario "Seguridad de los datos".
+- [ ] **Mantenimiento del servidor:** programar `npm run cleanup` (cron; hoy `refresh_tokens` solo se limpia
+  a mano), limpiar también `password_resets` (nunca se borran) y poner `max-size`/`max-file` al log de
+  `lectorAPI`. Después, dar plazos concretos en `#conservacion` de la Política de privacidad.
+- [ ] **Enlaces compartidos rotos.** La app comparte `https://nacholoz3d.cl/libro/<id>`, pero `nacholoz3d.cl`
+  apunta a `landing_ventas` (404). Crear `/libro/<id>` en la web nueva y apuntar la app a `lector.nacholoz3d.cl`.
+- [ ] **Textos legales vivos:** al terminar 1.3, 2.1–2.3, 3.x, 4.x, 5.3, 6.1 y 6.3, actualizar las frases de
+  `/terminos` y `/privacidad` que hoy remiten al correo (lista en el informe de la tarea 1.1/1.2).
 - [ ] **Bundle ID de iOS.** Sigue siendo `com.example.helloWorld` (plantilla). Cambiarlo a
   `com.nacholoz3d.lectorapp` (como Android) en `ios/Runner.xcodeproj` antes de compilar para iPhone.
 

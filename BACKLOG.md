@@ -87,7 +87,7 @@ Todo con **migración idempotente** (`npm run migrate`) y en el setup de la BD d
 
 ### 1.1 Redactar Términos y Condiciones básicos · S
 Como usuario, quiero saber qué reglas aplican a lo que publico.
-- [ ] Texto en español, versión `2026-11`: qué es el servicio, requisitos (edad mínima 13 años),
+- [x] Texto en español, versión `2026-11`: qué es el servicio, requisitos (edad mínima 13 años),
   cuenta y seguridad, **conducta y contenido prohibido** (odio, acoso, spam, contenido sexual o ilegal,
   suplantación), propiedad del contenido y licencia para mostrarlo, **moderación** (denuncias, ocultar,
   inhabilitación por sanción, una apelación), desactivación voluntaria y eliminación de la cuenta,
@@ -97,7 +97,7 @@ Como usuario, quiero saber qué reglas aplican a lo que publico.
   lenguaje claro; fecha y versión visibles.
 
 ### 1.2 Redactar Política de privacidad · S
-- [ ] Qué datos se recogen (email, usuario, bio, avatar, lecturas, reseñas, sesiones de lectura,
+- [x] Qué datos se recogen (email, usuario, bio, avatar, lecturas, reseñas, sesiones de lectura,
   "me gusta"), para qué, base legal, dónde se guardan (servidor propio), con quién se comparten
   (ZeptoMail solo para enviar correos; Open Library/Google Books para buscar libros), retención,
   derechos (acceso, corrección, **eliminación** con el enlace), seguridad (HTTPS, contraseñas con hash),
@@ -252,7 +252,7 @@ Como usuario suspendido, quiero pedir que se revise mi caso.
 - [ ] Crear el stack en Portainer (ver `DEPLOY.md` de la web, paso 2).
 - **Aceptación:** la web carga por HTTPS con nota A en las cabeceras de seguridad; la API y la BD no se reinician.
 
-### 5.2 Páginas públicas · S
+### 5.2 Páginas públicas · S · *`/`, `/terminos`, `/privacidad` y `/contacto` publicadas (web 50fde8c)*
 - [ ] `/` presentación breve de la app · `/terminos` · `/privacidad` · `/eliminar-cuenta` (2.3) ·
   `/apelar` (4.3 y 4.4) · `/contacto`.
 - **Aceptación:** HTML estático accesible (contraste AA, navegable con teclado), funciona en móvil.
