@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 — en desarrollo
+
+### Cuenta y comunidad
+- Registro con aceptación obligatoria de los **Términos** y la **Política de privacidad**
+  (versión `2026-11`, publicados en https://lector.nacholoz3d.cl).
+- Hoja **"Antes de compartir…"**: a las cuentas creadas antes se les pide aceptar la primera vez
+  que publican, sin perder lo escrito (o pueden guardar la lectura solo para ellas).
+- Perfil → ⚙ → **Legal** con enlaces a ambos documentos.
+
+### API
+- `accept_terms: true` obligatorio en el registro; `POST /account/terms`; publicar sin la versión
+  vigente aceptada → `403 TERMS_REQUIRED`. Columnas `users.terms_version` / `terms_accepted_at`
+  (migración paso 9). Estado de términos en `user` (login/registro/reset) y en el perfil propio.
+- Rol de administrador y tabla de auditoría `admin_actions` (base para la moderación).
+- CORS para la web nueva `https://lector.nacholoz3d.cl`.
+
+### Técnico
+- Nueva dependencia `url_launcher`. 68 tests en la app, 99 en la API.
+
 ## 1.0.0 — 2026-11-08
 
 Primera versión estable de LectorApp (app Flutter + API `Lectorapp API` desplegadas juntas).

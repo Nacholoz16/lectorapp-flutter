@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
+import 'terms_service.dart';
 
 class AuthService {
   // Singleton
@@ -50,10 +51,21 @@ class AuthService {
   }
 
   /// Registra un nuevo usuario y deja la sesión iniciada.
-  Future<void> register(String username, String email, String password) async {
+  /// [acceptedTerms]: la casilla de Términos y Privacidad; la API rechaza el registro sin ella.
+  Future<void> register(
+    String username,
+    String email,
+    String password, {
+    required bool acceptedTerms,
+  }) async {
     final data = await _api.post(
       '/auth/register',
-      body: {'username': username, 'email': email, 'password': password},
+      body: {
+        'username': username,
+        'email': email,
+        'password': password,
+        'accept_terms': acceptedTerms,
+      },
       redirectOn401: false,
     );
     await _saveSession(data);
@@ -69,6 +81,8 @@ class AuthService {
     );
 
     // Solo lo necesario para la UI: no persistimos el email en almacenamiento sin cifrar.
+    // Los campos de términos (versión aceptada / vigente) sirven para pedir la aceptación antes
+    // de publicar (ver TermsService).
     final user = data['user'] as Map? ?? {};
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -77,6 +91,7 @@ class AuthService {
         'id': user['id'],
         'username': user['username'],
         'avatar': user['avatar'],
+        ...TermsService.pickFields(user),
       }),
     );
   }

@@ -209,6 +209,7 @@ class ApiClient {
     throw ApiException(
       _extractErrorMessage(response),
       statusCode: response.statusCode,
+      code: extractErrorCode(response.body),
     );
   }
 
@@ -271,16 +272,31 @@ class ApiClient {
     return 'Error $statusCode';
   }
 
+  /// Código de error de la API (`{ code }`, p. ej. `TERMS_REQUIRED`), o null si no viene.
+  @visibleForTesting
+  static String? extractErrorCode(String body) {
+    try {
+      final data = json.decode(body);
+      if (data is Map && data['code'] is String) return data['code'] as String;
+    } catch (_) {}
+    return null;
+  }
+
   String _extractErrorMessage(http.Response response) =>
       extractErrorMessage(response.statusCode, response.body);
 }
 
 /// Excepción para cualquier error de API. `statusCode` es 0 si no hubo respuesta (red/timeout).
+/// `code` es el código de la API (`VALIDATION_ERROR`, `TERMS_REQUIRED`...) si vino en el cuerpo.
 class ApiException implements Exception {
   final String message;
   final int statusCode;
+  final String? code;
 
-  ApiException(this.message, {this.statusCode = 0});
+  ApiException(this.message, {this.statusCode = 0, this.code});
+
+  /// 403 por no haber aceptado los términos vigentes: la app pide aceptarlos y reintenta.
+  bool get isTermsRequired => statusCode == 403 && code == 'TERMS_REQUIRED';
 
   @override
   String toString() => message;

@@ -20,6 +20,12 @@ class Config {
     defaultValue: 'https://api.nacholoz3d.cl/api',
   );
 
+  /// Documentos legales publicados en la web (repo lectorapp-web). Se abren con
+  /// `openLegalDocument` (lib/widgets/terms_acceptance.dart). La versión vigente la decide la
+  /// API (`current_terms_version`), no la app.
+  static const String termsUrl = 'https://lector.nacholoz3d.cl/terminos';
+  static const String privacyUrl = 'https://lector.nacholoz3d.cl/privacidad';
+
   /// Clave global del Navigator para poder navegar desde servicios (ej: redirect a Login al recibir 401)
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();

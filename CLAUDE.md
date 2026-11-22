@@ -21,7 +21,7 @@ Qué puede hacer el usuario hoy:
 
 | Área | Funcionalidad |
 |---|---|
-| Cuenta | Registro, login con email **o** username, sesión que se renueva sola, logout con revocación, recuperación de contraseña con código de 6 dígitos por email. |
+| Cuenta | Registro (con aceptación obligatoria de Términos y Política de privacidad; a las cuentas anteriores se les pide antes de publicar por primera vez), login con email **o** username, sesión que se renueva sola, logout con revocación, recuperación de contraseña con código de 6 dígitos por email. |
 | Buscar | Búsqueda de libros (caché MySQL + Open Library en el servidor), detalle del libro con reseñas públicas. |
 | Lecturas | Añadir/editar/eliminar una lectura (`reading_log`): estado `leyendo`/`terminado`/`abandonado`, página actual, 1–5 estrellas, fechas, texto libre y visibilidad pública/privada. Borrador automático local. |
 | Cronómetro | Sesiones de lectura cronometradas en un servicio en primer plano (notificación persistente); al terminar se guardan minutos y páginas. |
@@ -76,6 +76,7 @@ Qué puede hacer el usuario hoy:
 | `google_fonts` | `^6.2.1` | **Lora** (títulos) y **Nunito** (cuerpo). |
 | `intl` | `^0.19.0` | Fechas en español (`initializeDateFormatting('es')`). |
 | `share_plus` | `^10.1.2` | Compartir enlaces de libros. |
+| `url_launcher` | `^6.3.3` | Abrir los Términos y la Política de privacidad (Custom Tabs o navegador; `<queries>` https en el manifest). |
 | `flutter_displaymode` | `^0.6.0` | Pedir el modo de mayor refresco en Android. |
 | `cupertino_icons` | `^1.0.2` | Íconos (dependencia de plantilla). |
 
@@ -113,7 +114,7 @@ test_lectorapp/
 ├── backend/                          # [SOLO LECTURA] espejo de la API (ver §8)
 ├── lib/
 │   ├── main.dart                     # Inits en paralelo, decisión de sesión, MaterialApp con tema reactivo
-│   ├── config.dart                   # Config.baseUrl (--dart-define API_BASE_URL) y Config.navigatorKey
+│   ├── config.dart                   # Config.baseUrl (--dart-define API_BASE_URL), navigatorKey, termsUrl/privacyUrl
 │   ├── book_cover.dart               # BookCover: portada con sombra, caché y placeholder con el título
 │   ├── theme/lector_colors.dart      # ThemeExtension LectorColors → context.lector
 │   ├── models/
@@ -124,6 +125,7 @@ test_lectorapp/
 │   ├── services/
 │   │   ├── api_client.dart           # Singleton HTTP: sesión, refresh automático, errores → ApiException
 │   │   ├── auth_service.dart         # login / register / forgot / reset / logout / isJwtValid
+│   │   ├── terms_service.dart        # Estado de aceptación de términos (user-data) y POST /account/terms
 │   │   ├── reading_service.dart      # Feed, caché, CRUD de lecturas, likes, sesiones, stats; libraryChanges
 │   │   ├── user_service.dart         # Perfil, biblioteca de un usuario, stats, meta, privacidad
 │   │   ├── book_service.dart         # Búsqueda y reseñas por libro (NO es singleton)
@@ -144,6 +146,7 @@ test_lectorapp/
 │   │   └── public_profile_screen.dart# Perfil ajeno: Biblioteca / Estadísticas, candados de privacidad
 │   └── widgets/
 │       ├── reading_log_sheet.dart    # ÚNICO formulario de lectura (añadir y editar)
+│       ├── terms_acceptance.dart     # Enlaces legales, casilla del registro, hoja "Antes de compartir…"
 │       ├── log_book_modal.dart · edit_book_modal.dart   # Envoltorios finos de ReadingLogSheet
 │       ├── user_card.dart            # Lectura en el feed (cards/compact) o reseña ('review')
 │       ├── library_book_tile.dart    # Fila de Mi biblioteca (editar / estadísticas)
@@ -153,7 +156,7 @@ test_lectorapp/
 │       ├── star_rating_input.dart    # Estrellas 0–5 accesibles
 │       ├── state_views.dart          # EmptyState / ErrorState
 │       └── book_loader.dart          # Loader animado (páginas de un libro)
-└── test/                             # 5 archivos, 47 tests (ver §10)
+└── test/                             # 6 archivos, 68 tests (ver §10)
 ```
 
 `.vscode/` (configuraciones de ejecución y la tarea `adb reverse`) **está en `.gitignore`**: existe en
@@ -210,7 +213,7 @@ API REST (Config.baseUrl)
   4. Refresh rechazado (`401`/`400`) → `clearSession()` + Login (flag `_isRedirectingToLogin` evita apilar varias pantallas) + `ApiException(401)`.
   5. Fallo de red o `5xx`/`429` al renovar → **la sesión se conserva**; sube la `ApiException`.
 - **`redirectOn401: false`** (solo existe en `post`) marca la petición como no autenticada: no intenta renovar ni redirige. Se usa en login, registro, logout, forgot y reset, donde un 401 significa "credenciales inválidas".
-- **Errores:** todo falla como `ApiException(message, statusCode)`.
+- **Errores:** todo falla como `ApiException(message, statusCode, code)` (`code` = el `code` del JSON de error, p. ej. `TERMS_REQUIRED`; `isTermsRequired` lo comprueba).
   - 4xx/5xx → campo `error` (o `message`) del JSON.
   - Cuerpo no JSON (HTML de Nginx en un 502) → mensaje genérico, nunca `FormatException`.
   - `TimeoutException` / `SocketException` / `ClientException` → mensaje amigable, `statusCode: 0`.
@@ -220,8 +223,9 @@ API REST (Config.baseUrl)
 - **Tests:** `ApiClient().httpClientForTesting = MockClient(...)` (ver `test/api_client_refresh_test.dart`).
 
 `AuthService`: `login(identifier, password)` envía `email` si contiene `@`, si no `username`.
-`_saveSession` guarda tokens y en `user-data` **solo** `id`, `username`, `avatar` (el email no se
-persiste sin cifrar). `logout()` llama a `POST /auth/logout` con el refresh token (si falla la red,
+`_saveSession` guarda tokens y en `user-data` **solo** `id`, `username`, `avatar` y los campos de
+términos (`terms_version`, `current_terms_version`, `needs_terms`); el email no se persiste sin cifrar.
+`register(..., acceptedTerms:)` envía `accept_terms`. `logout()` llama a `POST /auth/logout` con el refresh token (si falla la red,
 igual cierra la sesión local).
 
 ### 4.5 Flujos principales
@@ -241,6 +245,9 @@ igual cierra la sesión local).
 - `PopScope` bloquea el cierre con cambios sin guardar ("¿Descartar los cambios?"). Si el guardado falla, la hoja queda abierta con todo lo escrito.
 - Reglas: al añadir, por defecto `leyendo`, inicio hoy, **privado**. Página actual solo en `leyendo`; estrellas solo fuera de `leyendo`; `finish_date` solo en `terminado` (al elegirlo propone hoy y completa la página con `page_count`). Validación local: página ≤ `page_count`, término ≥ inicio, reseña ≤ 5000.
 - Payload: `logData = {status, rating|null, review_text, start_date, finish_date, is_log_public, current_page}`; al crear, `{bookData: {external_id, title, authors, cover_url, isbn, page_count, published_year}, logData}`.
+- **Términos antes de publicar (1.3):** si la lectura quedará pública y `TermsService().needsAcceptance()` es `true`, se muestra `showTermsSheet` ("Antes de compartir…": *Aceptar y publicar* → `POST /account/terms`; *Guardar solo para mí* → pasa a privada y guarda; *Ahora no* → no guarda y la hoja sigue abierta). Si el dato local es desconocido o viejo, un `403 TERMS_REQUIRED` abre la misma hoja y, si acepta, reintenta el guardado **una** vez.
+
+**Términos (`TermsService`)** — el estado de aceptación llega en el `user` de login/registro/reset y en el perfil propio (`ProfileScreen` lo guarda tras cargarlo, así las sesiones de la 1.0.0 también lo conocen). Es solo una pista: la API decide. Registro: casilla `TermsCheckbox` obligatoria (sin marcar por defecto). Perfil → ⚙ → *Legal* abre ambos documentos con `openLegalDocument`.
 
 **Biblioteca (`LibraryScreen`)** — carga la biblioteca **completa** (`my-library` en páginas de 50, tope de 20 páginas) para que filtros y contadores sean exactos en cliente. Filtros `leyendo` / `terminado` / `abandonado` con `SegmentedButton`; si no hay nada "leyendo" abre en el primer filtro con libros. Tarjeta "Empezar a leer" → `ReadingTimerModal`.
 
@@ -256,7 +263,7 @@ igual cierra la sesión local).
 |---|---|---|
 | SecureStorage | `auth-token` | JWT de acceso |
 | SecureStorage | `refresh-token` | Refresh token opaco |
-| SharedPreferences | `user-data` | JSON `{id, username, avatar}` |
+| SharedPreferences | `user-data` | JSON `{id, username, avatar, terms_version?, current_terms_version?, needs_terms?}` |
 | SharedPreferences | `cached_global_feed` | Primera página del feed (JSON) |
 | SharedPreferences | `app_theme` | `light` \| `pink` \| `blue` \| `dark` |
 | SharedPreferences | `feed_layout` | `cards` \| `compact` |
@@ -305,6 +312,8 @@ No hay base de datos local. Los borradores y preferencias **no** se borran al ce
 
 ## 6. Contrato de la API (v1.0.0)
 
+> Incluye los cambios de la tarea 1.3 (aceptación de términos), posteriores a la 1.0.0.
+
 Base: `Config.baseUrl` (`https://api.nacholoz3d.cl/api`). Todo requiere `Authorization: Bearer <JWT>`
 **salvo** `/auth/*`, `/books/feed` y `/health`. Body JSON máx. 100 kb.
 
@@ -317,6 +326,7 @@ Siempre `{ "error": string, "code": string }`:
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | No cumple el esquema Zod / JSON mal formado |
 | 401 | `UNAUTHORIZED` | Sin token, token inválido/expirado/revocado, credenciales inválidas |
 | 403 | `FORBIDDEN` | Recurso ajeno o privado |
+| 403 | `TERMS_REQUIRED` | Crear o dejar pública una lectura sin haber aceptado la versión vigente de los términos |
 | 404 | `NOT_FOUND` | Recurso o ruta inexistente |
 | 409 | `CONFLICT` | Email/username ya registrado; libro ya registrado por el usuario |
 | 413 | `PAYLOAD_TOO_LARGE` | Body mayor a 100 kb |
@@ -330,7 +340,7 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
 
 ### Validación relevante para la UI
 
-- **Registro:** `username` `^[a-zA-Z0-9_.-]{3,30}$`; `email` válido (se guarda en minúsculas); `password` ≥ 8 caracteres y ≤ 72 bytes.
+- **Registro:** `username` `^[a-zA-Z0-9_.-]{3,30}$`; `email` válido (se guarda en minúsculas); `password` ≥ 8 caracteres y ≤ 72 bytes; `accept_terms` debe ser exactamente `true`.
 - **Lecturas:** `status` ∈ `leyendo|terminado|abandonado`; `rating` entero 1–5 o `null` (0 ≡ `null`); `review_text` ≤ 5000; fechas `YYYY-MM-DD` con `finish_date >= start_date`; `cover_url` solo `https` de `covers.openlibrary.org` o Google Books.
 - **Sesiones:** `duration_minutes` 1–1440; `pages_read` 0–5000.
 - **Paginación:** `limit` ≤ 50.
@@ -339,11 +349,15 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
 
 **Auth (`/auth`)**
 - `POST /login` — `{ email | username, password }` → `{ token, refresh_token, user }`.
-- `POST /register` — `{ username, email, password }` → `201 { token, refresh_token, user }`.
+- `POST /register` — `{ username, email, password, accept_terms: true }` → `201 { token, refresh_token, user }`. Guarda la versión vigente y la fecha.
+- En login, registro y reset, `user` incluye `terms_version` (aceptada o `null`), `current_terms_version` y `needs_terms`.
 - `POST /refresh` — `{ refresh_token }` → `{ token, refresh_token }`. **Rota**: el usado queda revocado; reusar uno ya rotado revoca toda la familia → 401.
 - `POST /logout` — header `Authorization` (acceso vigente → blacklist por hash) y/o `{ refresh_token }` (revoca su familia). Al menos uno válido, si no 401.
 - `POST /forgot-password` — `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Código de 6 dígitos, vence en 15 min, 1 por minuto por cuenta.
 - `POST /reset-password` — `{ email, code, password }` → `{ token, refresh_token, user }`. Máx. 5 intentos por código; cierra todas las sesiones anteriores. Código inválido/vencido → 400.
+
+**Cuenta (`/account`)**
+- `POST /terms` — sin body; acepta la versión vigente (`CURRENT_TERMS_VERSION` de la API, hoy `2026-11`) → `{ terms_version, current_terms_version, needs_terms: false, terms_accepted_at }`. Idempotente (conserva la fecha de la primera aceptación).
 
 **Libros (`/books`)**
 - `GET /search?q=` — caché MySQL + Open Library (cacheado 10 min en el servidor) → `{ data: [...] }`.
@@ -353,15 +367,15 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
 - `GET /feed?limit=&before_id=` — feed global público por cursor.
 - `GET /feed/new-count?after_id=` — `{ count }`.
 - `GET /my-library?page=&limit=` — biblioteca del usuario autenticado.
-- `POST /` — `{ bookData, logData }` → `201 { logId }`; 409 si el libro ya está registrado.
-- `PUT /:id` — **parcial**: solo los campos enviados (`status`, `rating`, `review_text`, `start_date`, `finish_date`, `is_log_public`, `current_page`).
+- `POST /` — `{ bookData, logData }` → `201 { logId }`; 409 si el libro ya está registrado; `403 TERMS_REQUIRED` si es pública sin términos aceptados.
+- `PUT /:id` — **parcial**: solo los campos enviados (`status`, `rating`, `review_text`, `start_date`, `finish_date`, `is_log_public`, `current_page`). `403 TERMS_REQUIRED` si tras el cambio queda pública sin términos aceptados (incluye editar una que ya lo era); hacerla privada siempre se permite.
 - `DELETE /:id`
 - `POST /:id/like` — alterna → `{ liked, likes_count }`.
 - `POST /:id/session` — `{ duration_minutes, pages_read, current_page? }` (transacción).
 - `GET /:id/stats` — `{ total_minutes, total_sessions, avg_session_minutes, log_info }`.
 
 **Usuarios (`/users`)**
-- `GET /:username` — `{ username, bio, avatar_url, is_profile_public, are_stats_public, is_own_profile, is_private_lock, library }`.
+- `GET /:username` — `{ username, bio, avatar_url, is_profile_public, are_stats_public, is_own_profile, is_private_lock, library }`; si `is_own_profile`, además `terms_version`, `current_terms_version`, `needs_terms`.
 - `GET /:username/library?page=&limit=`
 - `GET /:username/stats` — `{ total_minutes, total_pages, finished_books, finished_books_this_year, target_books_this_year, avg_rating, total_likes, year, is_private }` o `{ is_private: true }`. `total_pages` = por lectura, `page_count` si está terminada (y se conoce), si no `current_page`.
 - `POST /goal` — `{ target_books: 1..1000 }`.
@@ -418,7 +432,7 @@ backend/tests/             # Jest + supertest (E2E contra la BD anti_social_test
 backend/deploy/            # deploy.bat (plink) + remote-deploy.sh; ver backend/DEPLOY.md
 ```
 
-- **Tablas:** `users`, `books` (`external_id` único), `reading_logs` (único `user_id + book_id`), `reading_likes`, `reading_sessions`, `reading_goals`, `token_blacklist`, `refresh_tokens` (hash SHA-256, `family_id`), `password_resets`.
+- **Tablas:** `users` (incluye `terms_version`, `terms_accepted_at` desde la 1.3), `books` (`external_id` único), `reading_logs` (único `user_id + book_id`), `reading_likes`, `reading_sessions`, `reading_goals`, `token_blacklist`, `refresh_tokens` (hash SHA-256, `family_id`), `password_resets`.
 - **Seguridad:** JWT HS256 con `jti` único, blacklist por hash, refresh rotativo con detección de reuso, `users.password_changed_at` invalida sesiones anteriores, bcrypt, respuestas de login/forgot que no revelan qué cuentas existen.
 - **CORS:** `https://nacholoz3d.cl`, `https://www.nacholoz3d.cl`, `http://localhost:3000`, `http://localhost:4200` (por eso la vista previa web usa `--web-port=4200`).
 - La receta completa de autenticación (API + Flutter) está en `docs/guia-autenticacion.md`.
@@ -430,7 +444,7 @@ backend/deploy/            # deploy.bat (plink) + remote-deploy.sh; ver backend/
 ```bash
 flutter pub get
 flutter analyze            # debe quedar "No issues found!"
-flutter test               # 47 tests
+flutter test               # 68 tests
 
 # --- Contra la API LOCAL (../Lectorapp API con `npm run dev`, puerto 3000) ---
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000/api                    # emulador Android
@@ -487,6 +501,7 @@ solo con confirmación explícita del usuario.**
 | `test/reading_log_form_test.dart` | `ReadingLogDraft` (igualdad, JSON, store) y `StarRatingInput` (toque, semántica, tamaño táctil). |
 | `test/theme_contrast_test.dart` | Contraste WCAG de las 4 paletas. |
 | `test/display_mode_service_test.dart` | `DisplayModeService.pickBestMode`. |
+| `test/terms_test.dart` | `TermsService` (necesita aceptar, guardar estado, `accept`), `ApiException.code`/`isTermsRequired`, registro con `accept_terms`, `TermsCheckbox` (semántica, 48 dp) y la hoja "Antes de compartir…" (incluido que no se cierra durante la petición). |
 
 No hay tests de pantallas completas ni de integración en la app. Para testear servicios, inyectar un
 `MockClient` en `ApiClient` y usar `SharedPreferences.setMockInitialValues`.

@@ -5,6 +5,7 @@ import 'tabs_screen.dart';
 import '../theme/lector_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../ui/feedback.dart';
+import '../widgets/terms_acceptance.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,6 +19,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+
+  /// Casilla de Términos y Privacidad: sin marcar por defecto (la API exige `accept_terms`).
+  bool _acceptedTerms = false;
+  bool _showTermsError = false;
+  static const _termsRequiredMessage =
+      'Para crear tu cuenta, acepta los Términos y la Política de privacidad.';
 
   // Mismas reglas que valida la API (registerSchema): así el usuario ve el error
   // al instante, sin esperar la respuesta del servidor.
@@ -39,6 +46,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (password.length < _minPasswordLength) {
       return 'La contraseña debe tener al menos $_minPasswordLength caracteres';
     }
+    if (!_acceptedTerms) return _termsRequiredMessage;
     return null;
   }
 
@@ -49,6 +57,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final error = _validate(username, email, password);
     if (error != null) {
+      if (error == _termsRequiredMessage) setState(() => _showTermsError = true);
       showError(context, error, fallback: error);
       return;
     }
@@ -56,7 +65,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await AuthService().register(username, email, password);
+      await AuthService()
+          .register(username, email, password, acceptedTerms: _acceptedTerms);
 
       // Si el registro es exitoso, viajamos directo al Home eliminando el historial
       if (mounted) {
@@ -144,7 +154,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   prefixIcon: Icon(Icons.lock_outline, color: context.lector.textSecondary),
                 ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 16),
+              TermsCheckbox(
+                value: _acceptedTerms,
+                errorText: _showTermsError && !_acceptedTerms
+                    ? _termsRequiredMessage
+                    : null,
+                onChanged: (v) => setState(() {
+                  _acceptedTerms = v;
+                  if (v) _showTermsError = false;
+                }),
+              ),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(

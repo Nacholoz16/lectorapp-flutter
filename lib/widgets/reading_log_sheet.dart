@@ -6,12 +6,15 @@ import 'package:intl/intl.dart';
 
 import '../book_cover.dart';
 import '../models/reading_log_draft.dart';
+import '../services/api_client.dart';
 import '../services/reading_service.dart';
+import '../services/terms_service.dart';
 import '../services/theme_service.dart';
 import '../theme/lector_colors.dart';
 import '../ui/feedback.dart';
 import '../utils/json_utils.dart';
 import 'star_rating_input.dart';
+import 'terms_acceptance.dart';
 
 /// Hoja inferior para **añadir** un libro a la biblioteca o **editar** una lectura.
 ///
@@ -219,12 +222,23 @@ class _ReadingLogSheetState extends State<ReadingLogSheet> {
 
   // --- Acciones ---
 
-  Future<void> _save() async {
+  /// [afterTermsAccepted]: reintento tras aceptar los términos por un 403 TERMS_REQUIRED
+  /// (se reintenta UNA sola vez; si vuelve a fallar se muestra el error normal).
+  Future<void> _save({bool afterTermsAccepted = false}) async {
     final validation = _pageError ?? _dateError;
     if (validation != null) {
       showError(context, validation, fallback: validation);
       return;
     }
+
+    // Publicar (o dejar pública) exige haber aceptado los términos vigentes. Si el teléfono
+    // ya sabe que faltan, se piden antes de enviar; si no lo sabe, decide la API (403 abajo).
+    if (_isPublic &&
+        !afterTermsAccepted &&
+        await TermsService().needsAcceptance() == true) {
+      if (!mounted || !await _askTerms()) return;
+    }
+    if (!mounted) return;
 
     setState(() => _isSaving = true);
     final fmt = DateFormat('yyyy-MM-dd');
@@ -267,13 +281,40 @@ class _ReadingLogSheetState extends State<ReadingLogSheet> {
       Navigator.of(context)
           .pop(widget.isEdit ? {'action': 'updated'} : {'saved': true});
     } catch (e) {
-      // El formulario queda abierto con todo lo escrito (y el borrador a salvo).
-      if (mounted) {
-        setState(() => _isSaving = false);
-        showError(context, e,
-            fallback: 'No pudimos guardar tu lectura. Inténtalo de nuevo.',
-            onRetry: _save);
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      // Red de seguridad: la API pide aceptar los términos (el dato local estaba viejo o no
+      // existía). Se muestra la hoja y, si acepta, se reintenta una vez.
+      if (e is ApiException && e.isTermsRequired && !afterTermsAccepted) {
+        await TermsService().markAcceptanceNeeded();
+        if (!mounted) return;
+        if (await _askTerms() && mounted) {
+          await _save(afterTermsAccepted: true);
+        }
+        return;
       }
+      // El formulario queda abierto con todo lo escrito (y el borrador a salvo).
+      showError(context, e,
+          fallback: 'No pudimos guardar tu lectura. Inténtalo de nuevo.',
+          onRetry: _save);
+    }
+  }
+
+  /// Hoja "Antes de compartir…". Devuelve true si se puede seguir guardando: porque aceptó
+  /// (sigue pública) o porque eligió guardarla solo para sí (pasa a privada). Con "Ahora no"
+  /// devuelve false y el formulario queda abierto con todo lo escrito.
+  Future<bool> _askTerms() async {
+    final result = await showTermsSheet(context);
+    if (!mounted) return false;
+    switch (result) {
+      case TermsSheetResult.accepted:
+        return true;
+      case TermsSheetResult.savePrivately:
+        setState(() => _isPublic = false);
+        _onChanged();
+        return true;
+      case TermsSheetResult.dismissed:
+        return false;
     }
   }
 

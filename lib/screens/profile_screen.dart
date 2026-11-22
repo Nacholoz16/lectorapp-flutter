@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/reading_service.dart';
+import '../services/terms_service.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
 import 'login_screen.dart';
@@ -13,6 +14,7 @@ import '../theme/lector_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../ui/feedback.dart';
 import '../utils/json_utils.dart';
+import '../widgets/terms_acceptance.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -144,6 +146,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         // /users/:username ya incluye la primera página de la biblioteca:
         // no hace falta pedir /library?page=1 por separado.
         final profileData = await UserService().getProfile(username);
+        // El perfil propio trae el estado de los términos: así las sesiones abiertas antes
+        // de la 1.1.0 (que no vuelven a pasar por el login) también lo conocen.
+        await TermsService().saveStatusFrom(profileData);
         if (mounted) {
           setState(() {
             _profile = UserProfile.fromJson(profileData);
@@ -275,6 +280,45 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  /// ⚙ → Legal. Hoja con los documentos legales; aquí se pueden sumar más enlaces.
+  void _onOpenLegalSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              header: true,
+              child: Text('Legal', style: ThemeService.titleStyle.copyWith(fontSize: 20)),
+            ),
+            const SizedBox(height: 8),
+            for (final (doc, icon) in const [
+              (LegalDocument.terms, Icons.gavel_rounded),
+              (LegalDocument.privacy, Icons.privacy_tip_outlined),
+            ])
+              // MergeSemantics: el rol de enlace se suma al nodo del ListTile (como en
+              // LegalLinkButton), en vez de quedar en un nodo aparte.
+              MergeSemantics(
+                child: Semantics(
+                  link: true,
+                  child: ListTile(
+                    leading: Icon(icon),
+                    title: Text(doc.label),
+                    subtitle: const Text('Se abre en el navegador'),
+                    trailing: const Icon(Icons.open_in_new_rounded),
+                    onTap: () => openLegalDocument(sheetContext, doc),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _onOpenFeedLayoutSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -333,6 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               if (value == 'privacy') _onOpenPrivacyDialog();
               if (value == 'theme') _onOpenThemeSheet();
               if (value == 'feed') _onOpenFeedLayoutSheet();
+              if (value == 'legal') _onOpenLegalSheet();
               if (value == 'logout') _onLogout();
             },
             itemBuilder: (BuildContext context) => [
@@ -354,6 +399,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                       leading: Icon(Icons.view_agenda_outlined),
                       title: Text('Vista del feed'),
                       contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(
+                  value: 'legal',
+                  child: ListTile(
+                      leading: Icon(Icons.description_outlined),
+                      title: Text('Legal'),
+                      contentPadding: EdgeInsets.zero)),
+              const PopupMenuDivider(),
               PopupMenuItem(
                   value: 'logout',
                   child: ListTile(

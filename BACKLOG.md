@@ -104,11 +104,11 @@ Como usuario, quiero saber qué reglas aplican a lo que publico.
   menores, contacto.
 - **Aceptación:** coincide con lo que se declare en el formulario "Seguridad de los datos" de Play Console.
 
-### 1.3 Aceptación obligatoria en la app · M
+### 1.3 Aceptación obligatoria en la app · M · *hecha; API pendiente de desplegar junto con la app*
 Como plataforma, necesito que nadie publique sin aceptar los términos.
-- [ ] API: `users.terms_version/terms_accepted_at`; registro exige `accept_terms: true`;
+- [x] API: `users.terms_version/terms_accepted_at`; registro exige `accept_terms: true`;
   `POST /account/terms`; crear/editar una lectura **pública** sin la versión vigente aceptada → `403 TERMS_REQUIRED`.
-- [ ] App: casilla obligatoria en Registro con enlaces a ambos documentos; para cuentas existentes,
+- [x] App: casilla obligatoria en Registro con enlaces a ambos documentos; para cuentas existentes,
   hoja "Antes de compartir…" la primera vez que publiquen; enlaces en Perfil → ⚙ → Legal.
 - **Aceptación:** no se puede crear contenido público sin aceptar; queda registrada versión y fecha.
 
