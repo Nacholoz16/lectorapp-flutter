@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config.dart';
 import '../screens/login_screen.dart';
+import 'account_service.dart';
 
 /// Cliente HTTP centralizado. TODA llamada a la API pasa por aquí.
 /// - Sesión = token de acceso (JWT de 30 min) + refresh token (60 días, rotativo), ambos en
@@ -30,6 +31,10 @@ class ApiClient {
   static const userDataKey = 'user-data';
   static const feedCacheKey = 'cached_global_feed';
   static const _refreshPath = '/auth/refresh';
+
+  /// Códigos de error de la API con tratamiento especial en el cliente.
+  static const accountDeactivatedCode = 'ACCOUNT_DEACTIVATED';
+  static const invalidPasswordCode = 'INVALID_PASSWORD';
 
   final _secureStorage = const FlutterSecureStorage();
 
@@ -91,6 +96,10 @@ class ApiClient {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(userDataKey);
     await prefs.remove(feedCacheKey);
+    // A propósito NO se toca AccountService().isDeactivated: cambiarlo aquí haría que TabsScreen
+    // (aún montada hasta que se navega a Login) volviera a crear las pestañas y lanzara
+    // peticiones sin token. El estado se fija en el próximo login/registro/reset
+    // (AuthService._saveSession escribe `status` y llama a AccountService().load()).
   }
 
   /// ¿El JWT ya venció (o vence en menos de 30 s)? Solo lee `exp`; la firma la valida la API.
@@ -149,8 +158,12 @@ class ApiClient {
 
     var response = await _request(method, path, body);
 
-    // 2. 401 en una petición autenticada: renovar una vez y reintentar.
-    if (response.statusCode == 401 && authenticated) {
+    // 2. 401 en una petición autenticada: renovar una vez y reintentar. Salvo INVALID_PASSWORD:
+    //    "la contraseña que confirmaste no es correcta" (p. ej. al desactivar la cuenta) no
+    //    significa que la sesión terminó, así que no se renueva ni se manda a Login.
+    if (response.statusCode == 401 &&
+        authenticated &&
+        extractErrorCode(response.body) != invalidPasswordCode) {
       // Si la renovación falla por red, la ApiException sube tal cual (sin cerrar sesión).
       if (await _refreshSession()) {
         response = await _request(method, path, body);
@@ -206,10 +219,16 @@ class ApiClient {
             statusCode: response.statusCode);
       }
     }
+    final code = extractErrorCode(response.body);
+    // Red de seguridad (tarea 2.1): la cuenta está desactivada (quizá desde otro teléfono).
+    // La app pasa a modo solo lectura; la excepción sigue subiendo a quien hizo la petición.
+    if (response.statusCode == 403 && code == accountDeactivatedCode) {
+      AccountService().onDeactivatedResponse();
+    }
     throw ApiException(
       _extractErrorMessage(response),
       statusCode: response.statusCode,
-      code: extractErrorCode(response.body),
+      code: code,
     );
   }
 
@@ -297,6 +316,14 @@ class ApiException implements Exception {
 
   /// 403 por no haber aceptado los términos vigentes: la app pide aceptarlos y reintenta.
   bool get isTermsRequired => statusCode == 403 && code == 'TERMS_REQUIRED';
+
+  /// 403 porque la cuenta está desactivada: la app ya pasó a modo solo lectura (ver ApiClient).
+  bool get isAccountDeactivated =>
+      statusCode == 403 && code == ApiClient.accountDeactivatedCode;
+
+  /// 401 por contraseña incorrecta al confirmar una acción (no es una sesión vencida).
+  bool get isInvalidPassword =>
+      statusCode == 401 && code == ApiClient.invalidPasswordCode;
 
   @override
   String toString() => message;

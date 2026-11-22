@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import '../services/account_service.dart';
+import 'deactivated_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'library_screen.dart';
 
 /// Contenedor principal: Inicio · Biblioteca · Perfil en un IndexedStack (conservan scroll
 /// y datos). La búsqueda vive en Inicio, como barra (ver `openSearch`).
+///
+/// Con la cuenta desactivada (tarea 2.1) muestra en su lugar [DeactivatedScreen]: solo la
+/// biblioteca, en modo lectura. Escucha `AccountService().isDeactivated`, así que cambia sola al
+/// desactivar, al reactivar o si la API responde 403 ACCOUNT_DEACTIVATED en cualquier pantalla;
+/// al volver, las pestañas se crean de nuevo y recargan sus datos.
 class TabsScreen extends StatefulWidget {
   const TabsScreen({super.key});
 
@@ -36,6 +43,14 @@ class _TabsScreenState extends State<TabsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AccountService().isDeactivated,
+      builder: (context, deactivated, _) =>
+          deactivated ? const DeactivatedScreen() : _buildTabs(),
+    );
+  }
+
+  Widget _buildTabs() {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,

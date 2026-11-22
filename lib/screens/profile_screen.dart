@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../services/account_service.dart';
 import '../services/auth_service.dart';
 import '../services/reading_service.dart';
 import '../services/terms_service.dart';
 import '../services/user_service.dart';
 import '../models/user_profile.dart';
+import 'deactivate_account_screen.dart';
 import 'login_screen.dart';
 import '../widgets/reading_timer_modal.dart';
 import '../services/theme_service.dart';
@@ -149,6 +151,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         // El perfil propio trae el estado de los términos: así las sesiones abiertas antes
         // de la 1.1.0 (que no vuelven a pasar por el login) también lo conocen.
         await TermsService().saveStatusFrom(profileData);
+        // Y el estado de la cuenta (2.1): la API decide, el dato local es solo una pista.
+        await AccountService().saveStatusFrom(profileData);
         if (mounted) {
           setState(() {
             _profile = UserProfile.fromJson(profileData);
@@ -319,6 +323,39 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  /// ⚙ → Cuenta. Acciones sobre la cuenta; la tarea 2.2 suma aquí "Eliminar mi cuenta".
+  void _onOpenAccountSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              header: true,
+              child: Text('Cuenta', style: ThemeService.titleStyle.copyWith(fontSize: 20)),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.pause_circle_outline_rounded),
+              title: const Text('Desactivar mi cuenta'),
+              subtitle: const Text('Tómate un descanso: oculta tu perfil sin perder tu biblioteca'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const DeactivateAccountScreen(),
+                )));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _onOpenFeedLayoutSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -378,6 +415,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               if (value == 'theme') _onOpenThemeSheet();
               if (value == 'feed') _onOpenFeedLayoutSheet();
               if (value == 'legal') _onOpenLegalSheet();
+              if (value == 'account') _onOpenAccountSheet();
               if (value == 'logout') _onLogout();
             },
             itemBuilder: (BuildContext context) => [
@@ -404,6 +442,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: ListTile(
                       leading: Icon(Icons.description_outlined),
                       title: Text('Legal'),
+                      contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(
+                  value: 'account',
+                  child: ListTile(
+                      leading: Icon(Icons.manage_accounts_outlined),
+                      title: Text('Cuenta'),
                       contentPadding: EdgeInsets.zero)),
               const PopupMenuDivider(),
               PopupMenuItem(

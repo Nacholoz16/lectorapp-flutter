@@ -8,16 +8,22 @@
 - Hoja **"Antes de compartir…"**: a las cuentas creadas antes se les pide aceptar la primera vez
   que publican, sin perder lo escrito (o pueden guardar la lectura solo para ellas).
 - Perfil → ⚙ → **Legal** con enlaces a ambos documentos.
+- **Desactivar y reactivar tu cuenta** (Perfil → ⚙ → Cuenta): tus lecturas públicas pasan a privadas y
+  tu perfil queda oculto; puedes entrar y ver tu biblioteca en modo lectura. Al volver, todo regresa
+  como estaba (salvo lo bloqueado por moderación).
 
 ### API
 - `accept_terms: true` obligatorio en el registro; `POST /account/terms`; publicar sin la versión
   vigente aceptada → `403 TERMS_REQUIRED`. Columnas `users.terms_version` / `terms_accepted_at`
   (migración paso 9). Estado de términos en `user` (login/registro/reset) y en el perfil propio.
+- `GET /account/status`, `POST /account/deactivate` (con contraseña), `POST /account/reactivate`;
+  códigos `403 ACCOUNT_DEACTIVATED` y `401 INVALID_PASSWORD`; `status` en el usuario; `protect`
+  cerrado por defecto para cuentas no activas (migración paso 10).
 - Rol de administrador y tabla de auditoría `admin_actions` (base para la moderación).
 - CORS para la web nueva `https://lector.nacholoz3d.cl`.
 
 ### Técnico
-- Nueva dependencia `url_launcher`. 68 tests en la app, 99 en la API.
+- Nueva dependencia `url_launcher`. 90 tests en la app, 117 en la API.
 
 ## 1.0.0 — 2026-11-08
 

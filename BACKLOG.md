@@ -119,27 +119,27 @@ Como plataforma, necesito que nadie publique sin aceptar los términos.
 > Ojo con los términos: **desactivar** es voluntario y reversible (esta épica); **inhabilitar**
 > es una sanción del sistema o de un admin (Épica 4).
 
-### 2.1 Desactivar y reactivar mi cuenta (voluntario) · M
+### 2.1 Desactivar y reactivar mi cuenta (voluntario) · M · *hecha; API pendiente de desplegar (migración paso 10)*
 Como usuario, quiero tomarme un descanso: ocultar mi perfil sin perder mi biblioteca.
-- [ ] API `POST /account/deactivate` (con contraseña), en una transacción:
+- [x] API `POST /account/deactivate` (con contraseña), en una transacción:
   guardar en `public_before_deactivation` la visibilidad actual de **cada** lectura, poner todas en
   privadas (`is_log_public = 0`), `status = 'deactivated'`, `status_changed_at`.
-- [ ] Estando desactivada:
+- [x] Estando desactivada:
   - `protect` deja pasar, pero un middleware `requireActive` responde `403 ACCOUNT_DEACTIVATED` en todo
     lo que **no** sea: ver mi biblioteca y mis estadísticas, reactivar, cerrar sesión, eliminar la cuenta.
   - Para los demás: perfil → 404, nada suyo en feed, reseñas por libro ni contadores públicos.
-- [ ] API `POST /account/reactivate` (botón + confirmación): restaura cada lectura a
+- [x] API `POST /account/reactivate` (botón + confirmación): restaura cada lectura a
   `public_before_deactivation` (las que tengan `moderation_locked_at` siguen privadas), limpia la
   columna, `status = 'active'`. Devuelve cuántas volvieron a ser públicas.
-- [ ] App, desactivar: Perfil → ⚙ → Cuenta → **Desactivar mi cuenta** → pantalla que explica qué pasa
+- [x] App, desactivar: Perfil → ⚙ → Cuenta → **Desactivar mi cuenta** → pantalla que explica qué pasa
   ("Tus N lecturas públicas pasarán a privadas; cuando vuelvas, regresarán como estaban") →
   confirmación.
-- [ ] App, estado desactivado: al entrar, modo **solo lectura**: solo la pestaña Biblioteca (sin Inicio,
+- [x] App, estado desactivado: al entrar, modo **solo lectura**: solo la pestaña Biblioteca (sin Inicio,
   sin buscar, sin botones de añadir/editar/cronómetro), con un aviso fijo "Tu cuenta está desactivada" y el
   botón **Reactivar mi cuenta**.
-- [ ] App, reactivar: confirmación que **recuerda** "Tus N lecturas que eran públicas volverán a ser
+- [x] App, reactivar: confirmación que **recuerda** "Tus N lecturas que eran públicas volverán a ser
   públicas" → tras reactivar, aviso "Volvieron a ser públicas N lecturas" y la app vuelve a la normalidad.
-- [ ] Tests E2E: visibilidad guardada y restaurada exactamente; bloqueadas por moderación siguen privadas;
+- [x] Tests E2E: visibilidad guardada y restaurada exactamente; bloqueadas por moderación siguen privadas;
   cada acción prohibida devuelve 403; otro usuario no ve nada del desactivado.
 - **Aceptación:** desactivar y reactivar dejan cada lectura exactamente como estaba; el usuario siempre
   sabe qué va a pasar antes de confirmar.

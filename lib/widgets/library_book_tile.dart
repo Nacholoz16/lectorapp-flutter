@@ -10,10 +10,12 @@ import 'status_chip.dart';
 
 /// Fila de un libro en "Mi biblioteca": portada, título, autor, estado y progreso.
 /// Tocarla abre la edición; el ícono de barras, las estadísticas de ese libro.
+/// Con [readOnly] (cuenta desactivada) no se puede editar: solo ver las estadísticas.
 class LibraryBookTile extends StatelessWidget {
   final ReadingLog log;
+  final bool readOnly;
 
-  const LibraryBookTile({super.key, required this.log});
+  const LibraryBookTile({super.key, required this.log, this.readOnly = false});
 
   Map<String, dynamic> get _logMap => {
         'id': log.id,
@@ -65,12 +67,12 @@ class LibraryBookTile extends StatelessWidget {
       children: [
         Expanded(
           child: Semantics(
-            button: true,
+            button: !readOnly,
             label: spoken,
-            hint: 'Editar lectura',
+            hint: readOnly ? null : 'Editar lectura',
             excludeSemantics: true,
             child: InkWell(
-              onTap: () => _openEdit(context),
+              onTap: readOnly ? null : () => _openEdit(context),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 4, 14),
                 child: Row(

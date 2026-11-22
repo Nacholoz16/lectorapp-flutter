@@ -14,8 +14,21 @@ import 'search_screen.dart';
 
 /// Pestaña "Mi biblioteca": todos los libros del usuario, filtrados por estado.
 /// (Antes vivía dentro de Perfil, mezclada con estadísticas y ajustes.)
+///
+/// Con [readOnly] es la pantalla de una cuenta desactivada (tarea 2.1): sin añadir, editar ni
+/// cronómetro (la API los rechaza); solo mirar y ver las estadísticas de cada libro.
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+  const LibraryScreen(
+      {super.key, this.readOnly = false, this.banner, this.appBar});
+
+  final bool readOnly;
+
+  /// Aviso que se muestra arriba de todo (p. ej. "Tu cuenta está desactivada").
+  final Widget? banner;
+
+  /// Barra superior fija opcional (la cuenta desactivada la usa para tener "Reactivar" siempre
+  /// a la vista, aunque el aviso grande quede fuera de pantalla al desplazarse).
+  final PreferredSizeWidget? appBar;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -128,6 +141,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     final c = context.lector;
 
     return Scaffold(
+      appBar: widget.appBar,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
@@ -135,6 +149,7 @@ class _LibraryScreenState extends State<LibraryScreen>
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (widget.banner != null) SliverToBoxAdapter(child: widget.banner),
               SliverToBoxAdapter(child: _buildHeader(c)),
               if (_isLoading)
                 const SliverFillRemaining(
@@ -149,25 +164,31 @@ class _LibraryScreenState extends State<LibraryScreen>
               else if (_library.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: EmptyState(
-                    icon: Icons.auto_stories_rounded,
-                    title: 'Tu biblioteca está esperando su primer libro',
-                    message: 'Busca lo que estás leyendo y empieza a guardar lo que piensas.',
-                    actionLabel: 'Buscar libros',
-                    actionIcon: Icons.search_rounded,
-                    onAction: () => openSearch(context),
-                  ),
+                  child: widget.readOnly
+                      ? const EmptyState(
+                          icon: Icons.auto_stories_rounded,
+                          title: 'Tu biblioteca está vacía',
+                          message: 'Cuando reactives tu cuenta podrás añadir tus libros.',
+                        )
+                      : EmptyState(
+                          icon: Icons.auto_stories_rounded,
+                          title: 'Tu biblioteca está esperando su primer libro',
+                          message: 'Busca lo que estás leyendo y empieza a guardar lo que piensas.',
+                          actionLabel: 'Buscar libros',
+                          actionIcon: Icons.search_rounded,
+                          onAction: () => openSearch(context),
+                        ),
                 )
               else ...[
                 SliverToBoxAdapter(child: _buildFilters(c)),
-                if (_filter == 'leyendo' && _count('leyendo') > 0)
+                if (!widget.readOnly && _filter == 'leyendo' && _count('leyendo') > 0)
                   SliverToBoxAdapter(child: _buildTimerCard(c)),
                 if (_visible.isEmpty)
                   SliverToBoxAdapter(
                     child: EmptyState(
                       icon: Icons.inbox_outlined,
                       title: 'Nada por aquí',
-                      message: _filter == 'leyendo'
+                      message: _filter == 'leyendo' && !widget.readOnly
                           ? '¿Empiezas un libro nuevo?'
                           : 'Aún no hay libros en esta lista.',
                     ),
@@ -177,7 +198,8 @@ class _LibraryScreenState extends State<LibraryScreen>
                     itemCount: _visible.length,
                     separatorBuilder: (_, __) =>
                         Divider(height: 1, indent: 20, endIndent: 20, color: c.outline),
-                    itemBuilder: (_, i) => LibraryBookTile(log: _visible[i]),
+                    itemBuilder: (_, i) =>
+                        LibraryBookTile(log: _visible[i], readOnly: widget.readOnly),
                   ),
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
@@ -216,16 +238,17 @@ class _LibraryScreenState extends State<LibraryScreen>
               ],
             ),
           ),
-          IconButton.filled(
-            onPressed: () => openSearch(context),
-            tooltip: 'Añadir un libro',
-            style: IconButton.styleFrom(
-              backgroundColor: c.ink,
-              foregroundColor: c.onInk,
-              minimumSize: const Size(48, 48),
+          if (!widget.readOnly)
+            IconButton.filled(
+              onPressed: () => openSearch(context),
+              tooltip: 'Añadir un libro',
+              style: IconButton.styleFrom(
+                backgroundColor: c.ink,
+                foregroundColor: c.onInk,
+                minimumSize: const Size(48, 48),
+              ),
+              icon: const Icon(Icons.add_rounded, size: 26),
             ),
-            icon: const Icon(Icons.add_rounded, size: 26),
-          ),
         ],
       ),
     );

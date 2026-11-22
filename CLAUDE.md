@@ -21,7 +21,7 @@ Qué puede hacer el usuario hoy:
 
 | Área | Funcionalidad |
 |---|---|
-| Cuenta | Registro (con aceptación obligatoria de Términos y Política de privacidad; a las cuentas anteriores se les pide antes de publicar por primera vez), login con email **o** username, sesión que se renueva sola, logout con revocación, recuperación de contraseña con código de 6 dígitos por email. |
+| Cuenta | Registro (con aceptación obligatoria de Términos y Política de privacidad; a las cuentas anteriores se les pide antes de publicar por primera vez), login con email **o** username, sesión que se renueva sola, logout con revocación, recuperación de contraseña con código de 6 dígitos por email. Desactivar y reactivar la cuenta (pausa voluntaria: lecturas privadas y perfil oculto; con la cuenta desactivada solo se ve la biblioteca, en modo lectura). |
 | Buscar | Búsqueda de libros (caché MySQL + Open Library en el servidor), detalle del libro con reseñas públicas. |
 | Lecturas | Añadir/editar/eliminar una lectura (`reading_log`): estado `leyendo`/`terminado`/`abandonado`, página actual, 1–5 estrellas, fechas, texto libre y visibilidad pública/privada. Borrador automático local. |
 | Cronómetro | Sesiones de lectura cronometradas en un servicio en primer plano (notificación persistente); al terminar se guardan minutos y páginas. |
@@ -126,6 +126,7 @@ test_lectorapp/
 │   │   ├── api_client.dart           # Singleton HTTP: sesión, refresh automático, errores → ApiException
 │   │   ├── auth_service.dart         # login / register / forgot / reset / logout / isJwtValid
 │   │   ├── terms_service.dart        # Estado de aceptación de términos (user-data) y POST /account/terms
+│   │   ├── account_service.dart      # Estado de la cuenta (isDeactivated), /account/status, desactivar, reactivar
 │   │   ├── reading_service.dart      # Feed, caché, CRUD de lecturas, likes, sesiones, stats; libraryChanges
 │   │   ├── user_service.dart         # Perfil, biblioteca de un usuario, stats, meta, privacidad
 │   │   ├── book_service.dart         # Búsqueda y reseñas por libro (NO es singleton)
@@ -134,12 +135,15 @@ test_lectorapp/
 │   │   ├── display_mode_service.dart # 90/120 Hz tras el primer frame y en cada onResume
 │   │   └── timer_background_service.dart # onStart (isolate) + fachada estática TimerBackgroundService
 │   ├── ui/feedback.dart              # showSuccess / showError / friendlyError / unawaitedHaptic
+│   ├── ui/account_copy.dart          # Textos de desactivar/reactivar (singular, plural y 0)
 │   ├── utils/json_utils.dart         # asBool / asInt
 │   ├── screens/
 │   │   ├── login_screen.dart · register_screen.dart · forgot_password_screen.dart
-│   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar; TabsScreen.select(context, i)
+│   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar; TabsScreen.select(context, i); DeactivatedScreen si la cuenta está desactivada
+│   │   ├── deactivated_screen.dart   # Modo solo lectura: biblioteca + aviso, "Reactivar mi cuenta", "Cerrar sesión"
+│   │   ├── deactivate_account_screen.dart # Perfil → ⚙ → Cuenta → Desactivar (explicación, contraseña, confirmación)
 │   │   ├── home_screen.dart          # Tab 0: saludo plegable, barra de búsqueda, "Sigues leyendo", feed
-│   │   ├── library_screen.dart       # Tab 1: Mi biblioteca (filtros, contadores, cronómetro)
+│   │   ├── library_screen.dart       # Tab 1: Mi biblioteca (filtros, contadores, cronómetro); readOnly para la cuenta desactivada
 │   │   ├── profile_screen.dart       # Tab 2: reto anual, estadísticas, ajustes (⚙)
 │   │   ├── search_screen.dart        # Pantalla apilada; función global openSearch(context)
 │   │   ├── book_detail_screen.dart   # Detalle con fondo blur + reseñas + FAB "Añadir a mi biblioteca"
@@ -156,7 +160,7 @@ test_lectorapp/
 │       ├── star_rating_input.dart    # Estrellas 0–5 accesibles
 │       ├── state_views.dart          # EmptyState / ErrorState
 │       └── book_loader.dart          # Loader animado (páginas de un libro)
-└── test/                             # 6 archivos, 68 tests (ver §10)
+└── test/                             # 7 archivos, 90 tests (ver §10)
 ```
 
 `.vscode/` (configuraciones de ejecución y la tarea `adb reverse`) **está en `.gitignore`**: existe en
@@ -182,13 +186,14 @@ API REST (Config.baseUrl)
   - `ThemeService().currentTheme` → escuchado en la raíz (`LectorApp`) con `ValueListenableBuilder`.
   - `PreferencesService().feedLayout` → escuchado por `HomeScreen`.
   - `ReadingService().libraryChanges` (contador) → se incrementa en `createLog`, `updateLog`, `deleteLog` y `recordSession`; lo escuchan `HomeScreen` (tarjeta "Sigues leyendo"), `LibraryScreen` y `ProfileScreen` para recargar en silencio.
+  - `AccountService().isDeactivated` (`bool`) → escuchado por `TabsScreen`: con la cuenta desactivada muestra `DeactivatedScreen` en lugar de las pestañas (ver §4.5 *Cuenta desactivada*).
 - **Datos:** casi toda la UI trabaja con `Map<String, dynamic>` crudos (feed, `UserCard`, búsqueda, detalle, modales). Los modelos tipados se usan en `LibraryScreen`, `LibraryBookTile`, `ProfileScreen` y `PublicProfileScreen` (`ReadingLog`, `UserProfile`). Cuando un widget tipado abre un modal, reconstruye un `Map` (`LibraryBookTile._logMap`).
 - **Imports:** conviven relativos (`../services/...`) y de paquete (`package:test_lectorapp/...`). En código nuevo, relativos.
 
 ### 4.2 Arranque (`main.dart`)
 
 1. `WidgetsFlutterBinding.ensureInitialized()`.
-2. `Future.wait` de inits independientes: `TimerBackgroundService.initializeService()`, `initializeDateFormatting('es')`, `ThemeService().loadTheme()`, `PreferencesService().load()`, `ApiClient().loadToken()`.
+2. `Future.wait` de inits independientes: `TimerBackgroundService.initializeService()`, `initializeDateFormatting('es')`, `ThemeService().loadTheme()`, `PreferencesService().load()`, `ApiClient().loadToken()`, `AccountService().load()` (estado de la cuenta guardado en `user-data`, para abrir directo en modo solo lectura).
 3. **Decisión de sesión sin red:** hay sesión si el JWT sigue vigente (`AuthService.isJwtValid`) **o** existe refresh token. Un token viejo vencido y sin refresh se limpia (`clearSession`).
 4. `runApp(LectorApp(initialScreen: TabsScreen | LoginScreen))`.
 5. `DisplayModeService.init()` (después de `runApp`: en `main()` la ventana aún no existe).
@@ -199,7 +204,7 @@ API REST (Config.baseUrl)
 - `TabsScreen`: `IndexedStack` con `HomeScreen`, `LibraryScreen`, `ProfileScreen` (todas con `AutomaticKeepAliveClientMixin`, conservan scroll y datos). `TabsScreen.select(context, TabsScreen.profile)` cambia de pestaña desde un hijo.
 - La búsqueda no es pestaña: `openSearch(context)` (definida en `search_screen.dart`) apila `SearchScreen`.
 - Formularios y paneles son `showModalBottomSheet(isScrollControlled: true, backgroundColor: Colors.transparent)`.
-- `Config.navigatorKey` permite a `ApiClient` navegar a `LoginScreen` (limpiando el stack) cuando la sesión termina de verdad.
+- `Config.navigatorKey` permite a `ApiClient` navegar a `LoginScreen` (limpiando el stack) cuando la sesión termina de verdad, y a `AccountService` cerrar las pantallas apiladas (`popUntil(isFirst)`) al recibir `403 ACCOUNT_DEACTIVATED`.
 - Tras login/registro/reset: `pushReplacement` / `pushAndRemoveUntil` a `TabsScreen`.
 
 ### 4.4 `ApiClient` y sesión
@@ -208,23 +213,25 @@ API REST (Config.baseUrl)
 - **Sesión:** JWT de acceso (**30 min**) + refresh token opaco (**60 días**, rotativo), ambos en `FlutterSecureStorage` y cacheados en memoria (`loadToken()` al arrancar).
 - **Renovación automática:**
   1. Antes de pedir: si el acceso está vencido (`isAccessTokenExpired`, margen de 30 s) y hay refresh, renueva primero.
-  2. Ante un `401`: renueva una vez y reintenta la petición.
+  2. Ante un `401`: renueva una vez y reintenta la petición. **Excepción:** un `401 INVALID_PASSWORD` ("la contraseña que confirmaste no es correcta", p. ej. al desactivar) no renueva ni manda a Login.
   3. Peticiones simultáneas comparten **una** renovación (`_refreshing`).
   4. Refresh rechazado (`401`/`400`) → `clearSession()` + Login (flag `_isRedirectingToLogin` evita apilar varias pantallas) + `ApiException(401)`.
   5. Fallo de red o `5xx`/`429` al renovar → **la sesión se conserva**; sube la `ApiException`.
 - **`redirectOn401: false`** (solo existe en `post`) marca la petición como no autenticada: no intenta renovar ni redirige. Se usa en login, registro, logout, forgot y reset, donde un 401 significa "credenciales inválidas".
-- **Errores:** todo falla como `ApiException(message, statusCode, code)` (`code` = el `code` del JSON de error, p. ej. `TERMS_REQUIRED`; `isTermsRequired` lo comprueba).
+- **Errores:** todo falla como `ApiException(message, statusCode, code)` (`code` = el `code` del JSON de error, p. ej. `TERMS_REQUIRED`; `isTermsRequired`, `isAccountDeactivated` e `isInvalidPassword` lo comprueban).
+  - **Red de seguridad:** cualquier `403 ACCOUNT_DEACTIVATED` llama a `AccountService().onDeactivatedResponse()` (pasa a modo solo lectura una sola vez, sin bucles) y luego lanza la excepción como siempre.
   - 4xx/5xx → campo `error` (o `message`) del JSON.
   - Cuerpo no JSON (HTML de Nginx en un 502) → mensaje genérico, nunca `FormatException`.
   - `TimeoutException` / `SocketException` / `ClientException` → mensaje amigable, `statusCode: 0`.
-- **`clearSession()`** borra ambos tokens, `user-data` y `cached_global_feed`.
+- **`clearSession()`** borra ambos tokens, `user-data` y `cached_global_feed`. **No** toca `AccountService().isDeactivated`: si lo pusiera en `false`, `TabsScreen` volvería a crear las pestañas antes de llegar a Login y lanzaría peticiones sin token; el estado se fija en el siguiente login/registro/reset.
 - **Logs:** solo en `kDebugMode`, método + URL + status. Nunca bodies (pueden llevar contraseñas).
 - Hay dos lectores de `exp` con propósitos distintos: `AuthService.isJwtValid` (arranque, sin margen) y `ApiClient.isAccessTokenExpired` (margen de 30 s). Ninguno valida la firma: eso lo hace la API.
 - **Tests:** `ApiClient().httpClientForTesting = MockClient(...)` (ver `test/api_client_refresh_test.dart`).
 
 `AuthService`: `login(identifier, password)` envía `email` si contiene `@`, si no `username`.
-`_saveSession` guarda tokens y en `user-data` **solo** `id`, `username`, `avatar` y los campos de
-términos (`terms_version`, `current_terms_version`, `needs_terms`); el email no se persiste sin cifrar.
+`_saveSession` guarda tokens y en `user-data` **solo** `id`, `username`, `avatar`, `status` (sin el
+campo → `active`) y los campos de términos (`terms_version`, `current_terms_version`, `needs_terms`);
+el email no se persiste sin cifrar. Luego `AccountService().load()` aplica el estado.
 `register(..., acceptedTerms:)` envía `accept_terms`. `logout()` llama a `POST /auth/logout` con el refresh token (si falla la red,
 igual cierra la sesión local).
 
@@ -249,6 +256,10 @@ igual cierra la sesión local).
 
 **Términos (`TermsService`)** — el estado de aceptación llega en el `user` de login/registro/reset y en el perfil propio (`ProfileScreen` lo guarda tras cargarlo, así las sesiones de la 1.0.0 también lo conocen). Es solo una pista: la API decide. Registro: casilla `TermsCheckbox` obligatoria (sin marcar por defecto). Perfil → ⚙ → *Legal* abre ambos documentos con `openLegalDocument`.
 
+**Cuenta (2.1, `AccountService`)** — Perfil → ⚙ → *Cuenta* (hoja con "Desactivar mi cuenta"; la 2.2 sumará "Eliminar mi cuenta") → `DeactivateAccountScreen`: pide `GET /account/status` para decir *antes* cuántas lecturas públicas pasarán a privadas, contraseña (`401 INVALID_PASSWORD` se muestra junto al campo, sin cerrar la sesión) y diálogo de confirmación → `POST /account/deactivate` → `isDeactivated = true`, vuelve a la raíz con un aviso.
+
+**Cuenta desactivada (modo solo lectura)** — `TabsScreen` muestra `DeactivatedScreen` = `LibraryScreen(readOnly: true)` con un `AppBar` fijo "Cuenta desactivada" + botón **Reactivar** (sin añadir, editar, buscar ni cronómetro; las estadísticas de cada libro sí, la API las permite) + aviso fijo arriba "Tu cuenta está desactivada" con **Reactivar mi cuenta** y **Cerrar sesión**. Al abrirse consulta `GET /account/status` (si se reactivó en otro teléfono, vuelve sola a las pestañas). Reactivar: `GET /account/status` → diálogo con "Tus N lecturas que eran públicas volverán a ser públicas" → `POST /account/reactivate` → aviso "Volvieron a ser públicas N lecturas" y vuelven las 3 pestañas (se crean de nuevo y recargan sus datos). Se entra en este modo al arrancar (`user-data`), al iniciar sesión (`user.status`), tras desactivar o por la red de seguridad del `403 ACCOUNT_DEACTIVATED`. Solo llama a endpoints permitidos, así que no puede provocar otro 403.
+
 **Biblioteca (`LibraryScreen`)** — carga la biblioteca **completa** (`my-library` en páginas de 50, tope de 20 páginas) para que filtros y contadores sean exactos en cliente. Filtros `leyendo` / `terminado` / `abandonado` con `SegmentedButton`; si no hay nada "leyendo" abre en el primer filtro con libros. Tarjeta "Empezar a leer" → `ReadingTimerModal`.
 
 **Perfiles** — `GET /users/:username` ya trae la primera página de `library`. `ProfileScreen` (propio) la usa para el reto y las estadísticas (`/users/:username/stats`); `PublicProfileScreen` pagina el resto con `/users/:username/library?page=N` y solo pide stats si el perfil es público.
@@ -263,7 +274,7 @@ igual cierra la sesión local).
 |---|---|---|
 | SecureStorage | `auth-token` | JWT de acceso |
 | SecureStorage | `refresh-token` | Refresh token opaco |
-| SharedPreferences | `user-data` | JSON `{id, username, avatar, terms_version?, current_terms_version?, needs_terms?}` |
+| SharedPreferences | `user-data` | JSON `{id, username, avatar, status, terms_version?, current_terms_version?, needs_terms?}` (`status`: `active` o `deactivated`) |
 | SharedPreferences | `cached_global_feed` | Primera página del feed (JSON) |
 | SharedPreferences | `app_theme` | `light` \| `pink` \| `blue` \| `dark` |
 | SharedPreferences | `feed_layout` | `cards` \| `compact` |
@@ -312,7 +323,8 @@ No hay base de datos local. Los borradores y preferencias **no** se borran al ce
 
 ## 6. Contrato de la API (v1.0.0)
 
-> Incluye los cambios de la tarea 1.3 (aceptación de términos), posteriores a la 1.0.0.
+> Incluye los cambios de las tareas 1.3 (aceptación de términos) y 2.1 (desactivar/reactivar la
+> cuenta), posteriores a la 1.0.0.
 
 Base: `Config.baseUrl` (`https://api.nacholoz3d.cl/api`). Todo requiere `Authorization: Bearer <JWT>`
 **salvo** `/auth/*`, `/books/feed` y `/health`. Body JSON máx. 100 kb.
@@ -325,10 +337,12 @@ Siempre `{ "error": string, "code": string }`:
 |---|---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | No cumple el esquema Zod / JSON mal formado |
 | 401 | `UNAUTHORIZED` | Sin token, token inválido/expirado/revocado, credenciales inválidas |
+| 401 | `INVALID_PASSWORD` | La contraseña con la que se confirma una acción de la cuenta (desactivar) no es correcta. **No** es una sesión vencida |
 | 403 | `FORBIDDEN` | Recurso ajeno o privado |
 | 403 | `TERMS_REQUIRED` | Crear o dejar pública una lectura sin haber aceptado la versión vigente de los términos |
+| 403 | `ACCOUNT_DEACTIVATED` | La cuenta está desactivada y el endpoint no está entre los permitidos (ver *Cuenta*) |
 | 404 | `NOT_FOUND` | Recurso o ruta inexistente |
-| 409 | `CONFLICT` | Email/username ya registrado; libro ya registrado por el usuario |
+| 409 | `CONFLICT` | Email/username ya registrado; libro ya registrado por el usuario; desactivar una cuenta ya desactivada o reactivar una activa |
 | 413 | `PAYLOAD_TOO_LARGE` | Body mayor a 100 kb |
 | 429 | `RATE_LIMITED` | Límite de peticiones |
 | 500 | `INTERNAL_ERROR` | Error no controlado (el detalle solo va al log) |
@@ -336,7 +350,7 @@ Siempre `{ "error": string, "code": string }`:
 ### Límites de peticiones (por IP)
 
 General 300 / 15 min. Login: 10 intentos **fallidos** / 5 min. Registro: 10 / hora. Forgot: 5 / hora.
-Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
+Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min. Desactivar: 5 contraseñas **incorrectas** / 15 min (por cuenta).
 
 ### Validación relevante para la UI
 
@@ -350,7 +364,7 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
 **Auth (`/auth`)**
 - `POST /login` — `{ email | username, password }` → `{ token, refresh_token, user }`.
 - `POST /register` — `{ username, email, password, accept_terms: true }` → `201 { token, refresh_token, user }`. Guarda la versión vigente y la fecha.
-- En login, registro y reset, `user` incluye `terms_version` (aceptada o `null`), `current_terms_version` y `needs_terms`.
+- En login, registro y reset, `user` incluye `terms_version` (aceptada o `null`), `current_terms_version`, `needs_terms` y `status` (`active` | `deactivated`). Una cuenta desactivada **sí** puede iniciar sesión, renovar y cerrar sesión.
 - `POST /refresh` — `{ refresh_token }` → `{ token, refresh_token }`. **Rota**: el usado queda revocado; reusar uno ya rotado revoca toda la familia → 401.
 - `POST /logout` — header `Authorization` (acceso vigente → blacklist por hash) y/o `{ refresh_token }` (revoca su familia). Al menos uno válido, si no 401.
 - `POST /forgot-password` — `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Código de 6 dígitos, vence en 15 min, 1 por minuto por cuenta.
@@ -358,6 +372,10 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
 
 **Cuenta (`/account`)**
 - `POST /terms` — sin body; acepta la versión vigente (`CURRENT_TERMS_VERSION` de la API, hoy `2026-11`) → `{ terms_version, current_terms_version, needs_terms: false, terms_accepted_at }`. Idempotente (conserva la fecha de la primera aceptación).
+- `GET /status` — `{ status, status_changed_at, public_readings, restorable_readings }`: lecturas públicas ahora / las que volverán a ser públicas al reactivar (sin las bloqueadas por moderación).
+- `POST /deactivate` — `{ password }` → `{ status: 'deactivated', hidden_readings }`. En una transacción guarda la visibilidad de **cada** lectura (`public_before_deactivation`) y las deja todas privadas. Contraseña incorrecta → `401 INVALID_PASSWORD` (nada cambia). Ya desactivada → `409` (no pisa la visibilidad guardada).
+- `POST /reactivate` — sin body ni contraseña → `{ status: 'active', restored_readings }`. Cada lectura vuelve a su visibilidad anterior salvo las que tengan `moderation_locked_at` (siguen privadas). No exige los términos vigentes (restaura, no publica). Ya activa → `409`.
+- **Con la cuenta desactivada** solo responden: `GET /readings/my-library`, `GET /readings/:id/stats` (solo de **sus** lecturas), `GET /account/status`, `POST /account/reactivate`, `POST /account/deactivate` (→ 409) y `/auth/*`. Todo lo demás → `403 ACCOUNT_DEACTIVATED`. Para los demás usuarios su perfil, biblioteca y stats responden `404` (igual que un usuario inexistente), no aparece en el feed ni en `/books/feed`, y sus "me gusta" dejan de contar en `likes_count` y `total_likes` (no se borran; vuelven al reactivar).
 
 **Libros (`/books`)**
 - `GET /search?q=` — caché MySQL + Open Library (cacheado 10 min en el servidor) → `{ data: [...] }`.
@@ -375,7 +393,7 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
 - `GET /:id/stats` — `{ total_minutes, total_sessions, avg_session_minutes, log_info }`.
 
 **Usuarios (`/users`)**
-- `GET /:username` — `{ username, bio, avatar_url, is_profile_public, are_stats_public, is_own_profile, is_private_lock, library }`; si `is_own_profile`, además `terms_version`, `current_terms_version`, `needs_terms`.
+- `GET /:username` — `{ username, bio, avatar_url, is_profile_public, are_stats_public, is_own_profile, is_private_lock, library }`; si `is_own_profile`, además `terms_version`, `current_terms_version`, `needs_terms` y `status`. Usuario inexistente **o no activo** → 404 (también en `/library` y `/stats`).
 - `GET /:username/library?page=&limit=`
 - `GET /:username/stats` — `{ total_minutes, total_pages, finished_books, finished_books_this_year, target_books_this_year, avg_rating, total_likes, year, is_private }` o `{ is_private: true }`. `total_pages` = por lectura, `page_count` si está terminada (y se conoce), si no `current_page`.
 - `POST /goal` — `{ target_books: 1..1000 }`.
@@ -432,7 +450,8 @@ backend/tests/             # Jest + supertest (E2E contra la BD anti_social_test
 backend/deploy/            # deploy.bat (plink) + remote-deploy.sh; ver backend/DEPLOY.md
 ```
 
-- **Tablas:** `users` (incluye `terms_version`, `terms_accepted_at` desde la 1.3), `books` (`external_id` único), `reading_logs` (único `user_id + book_id`), `reading_likes`, `reading_sessions`, `reading_goals`, `token_blacklist`, `refresh_tokens` (hash SHA-256, `family_id`), `password_resets`.
+- **Tablas:** `users` (incluye `terms_version`, `terms_accepted_at` desde la 1.3; `status` `active|deactivated|suspended` y `status_changed_at` desde la 2.1), `books` (`external_id` único), `reading_logs` (único `user_id + book_id`; `public_before_deactivation` y `moderation_locked_at` desde la 2.1), `reading_likes`, `reading_sessions`, `reading_goals`, `token_blacklist`, `refresh_tokens` (hash SHA-256, `family_id`), `password_resets`.
+- **Middleware de sesión:** `authenticate` (JWT válido, no revocado, usuario existente) y `protect` = `authenticate` + `requireActive` (cuenta `active`, si no `403 ACCOUNT_DEACTIVATED`). `protect` es el de por defecto: las pocas rutas permitidas a una cuenta desactivada se montan con `authenticate` **antes** del `router.use(protect)`.
 - **Seguridad:** JWT HS256 con `jti` único, blacklist por hash, refresh rotativo con detección de reuso, `users.password_changed_at` invalida sesiones anteriores, bcrypt, respuestas de login/forgot que no revelan qué cuentas existen.
 - **CORS:** `https://nacholoz3d.cl`, `https://www.nacholoz3d.cl`, `http://localhost:3000`, `http://localhost:4200` (por eso la vista previa web usa `--web-port=4200`).
 - La receta completa de autenticación (API + Flutter) está en `docs/guia-autenticacion.md`.
@@ -444,7 +463,7 @@ backend/deploy/            # deploy.bat (plink) + remote-deploy.sh; ver backend/
 ```bash
 flutter pub get
 flutter analyze            # debe quedar "No issues found!"
-flutter test               # 68 tests
+flutter test               # 90 tests
 
 # --- Contra la API LOCAL (../Lectorapp API con `npm run dev`, puerto 3000) ---
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000/api                    # emulador Android
@@ -502,8 +521,9 @@ solo con confirmación explícita del usuario.**
 | `test/theme_contrast_test.dart` | Contraste WCAG de las 4 paletas. |
 | `test/display_mode_service_test.dart` | `DisplayModeService.pickBestMode`. |
 | `test/terms_test.dart` | `TermsService` (necesita aceptar, guardar estado, `accept`), `ApiException.code`/`isTermsRequired`, registro con `accept_terms`, `TermsCheckbox` (semántica, 48 dp) y la hoja "Antes de compartir…" (incluido que no se cierra durante la petición). |
+| `test/account_deactivation_test.dart` | Textos de `account_copy`, parseo de `status`/`AccountStatusInfo`, `user-data` y login con `status`, red de seguridad del `403 ACCOUNT_DEACTIVATED` (una vez, cierra pantallas apiladas), `401 INVALID_PASSWORD` sin renovar ni cerrar sesión, desactivar/reactivar (incluido 409), `TabsScreen` en modo solo lectura, `DeactivatedScreen` (reactivar con confirmación) y `DeactivateAccountScreen` (contraseña incorrecta junto al campo). |
 
-No hay tests de pantallas completas ni de integración en la app. Para testear servicios, inyectar un
+Salvo `DeactivatedScreen` y `DeactivateAccountScreen`, no hay tests de pantallas completas ni de integración en la app. Para testear servicios, inyectar un
 `MockClient` en `ApiClient` y usar `SharedPreferences.setMockInitialValues`.
 
 ---

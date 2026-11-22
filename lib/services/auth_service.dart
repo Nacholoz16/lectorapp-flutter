@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'account_service.dart';
 import 'api_client.dart';
 import 'terms_service.dart';
 
@@ -82,7 +83,7 @@ class AuthService {
 
     // Solo lo necesario para la UI: no persistimos el email en almacenamiento sin cifrar.
     // Los campos de términos (versión aceptada / vigente) sirven para pedir la aceptación antes
-    // de publicar (ver TermsService).
+    // de publicar (ver TermsService); `status`, para el modo solo lectura (ver AccountService).
     final user = data['user'] as Map? ?? {};
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -91,9 +92,13 @@ class AuthService {
         'id': user['id'],
         'username': user['username'],
         'avatar': user['avatar'],
+        // Estado de la cuenta (2.1): una cuenta desactivada entra en modo solo lectura.
+        // Sin el campo (API anterior a la 1.1.0) se asume activa: la API decide igual.
+        'status': AccountService.statusFrom(user) ?? AccountService.active,
         ...TermsService.pickFields(user),
       }),
     );
+    await AccountService().load();
   }
 
   /// Obtener el token actual (desde caché en memoria).

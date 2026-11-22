@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'screens/login_screen.dart';
 import 'screens/tabs_screen.dart';
+import 'services/account_service.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
 import 'services/display_mode_service.dart';
@@ -20,12 +21,15 @@ void main() async {
   //    - formato de fechas en español
   //    - tema guardado
   //    - token desde el almacenamiento cifrado
+  //    - estado de la cuenta (activa / desactivada) guardado en user-data
   await Future.wait([
     TimerBackgroundService.initializeService(),
     initializeDateFormatting('es', null),
     ThemeService().loadTheme(),
     PreferencesService().load(),
     ApiClient().loadToken(),
+    // Cuenta desactivada → modo solo lectura desde el primer frame (sin esperar a la red).
+    AccountService().load(),
   ]);
 
   // 3. AUTO-LOGIN: hay sesión si el token de acceso sigue vigente o si hay refresh token
