@@ -1,361 +1,534 @@
 # CLAUDE.md — LectorApp (`test_lectorapp`)
 
-Este archivo contiene el contexto técnico, la arquitectura, las librerías y las convenciones de diseño de **LectorApp**, una aplicación móvil de seguimiento de lectura y comunidad de reseñas desarrollada en **Flutter**. Sirve como guía base para cualquier agente o desarrollador que trabaje en este repositorio.
+Guía técnica para cualquier agente o desarrollador que trabaje en este repositorio: qué es la app,
+cómo está construida, qué contratos respeta y qué reglas seguir al modificarla. Describe el estado
+**real del código en la versión 1.0.0** (tag `v1.0.0`); lo planificado para después vive en
+`BACKLOG.md` y `PENDIENTES.md` y no se describe aquí.
+
+Última revisión completa contra el código: 2026-11-11 (`flutter analyze` sin issues, 47 tests en verde,
+Flutter 3.44.7 / Dart 3.12.2).
 
 ---
 
-## 1. Contexto General del Proyecto
+## 1. Qué es LectorApp
 
-**LectorApp** (*"Tu rincón de lectura acogedor"*) es una aplicación social y personal de registro de lecturas con un enfoque minimalista ("Anti-Social Reader"). Permite a los usuarios:
+**LectorApp** (*"Tu rincón de lectura acogedor"*) es una app móvil **Flutter** (Android como
+plataforma principal) para llevar un registro personal de lecturas, con una capa social mínima
+("Anti-Social Reader"): privado por defecto, un feed global de lo que la gente decide compartir y
+"me gusta". No hay seguidores, comentarios ni mensajes.
 
-- **Descubrir y buscar libros** (integrado en el backend con caché local en MySQL y Open Library API).
-- **Registrar lecturas (`reading_logs`)** con estados (`leyendo`, `terminado`, `abandonado`), progreso de páginas (`current_page` / `page_count`), calificaciones de 1 a 5 estrellas, fechas de inicio/fin, reseñas de texto y visibilidad pública o privada.
-- **Cronometrar sesiones de lectura en segundo plano** mediante un Foreground Service con notificación persistente en tiempo real y guardado de sesiones (`duration_minutes`, `pages_read`).
-- **Interactuar en un Feed Global** paginado por cursor, con caché local, detección de nuevas publicaciones, *optimistic UI* para Likes y opción de compartir enlaces (`https://nacholoz3d.cl/libro/<external_id>`).
-- **Gestionar su Perfil y Estadísticas**, incluyendo metas de lectura anuales (Reto del año), métricas acumuladas (tiempo total, páginas leídas, promedio de estrellas, likes recibidos), ajustes de privacidad (perfil público/privado y estadísticas públicas/privadas) y selector de temas visuales.
+Qué puede hacer el usuario hoy:
 
-> **⚠️ IMPORTANTE SOBRE LA CARPETA `backend/`:**
-> La carpeta `backend/` dentro de este repositorio es **únicamente un espejo de lectura/referencia** de la API en Node.js + Express + MySQL (tal como indica `backend/Intrucciones.txt`), sincronizado con el repositorio principal (`../Lectorapp API`). **NO es la carpeta activa de desarrollo del backend**: úsala para consultar cómo están implementados los controladores, modelos SQL y rutas, pero cualquier cambio real al servidor debe aplicarse en `Lectorapp API` y luego re-sincronizar el espejo (ver §7).
+| Área | Funcionalidad |
+|---|---|
+| Cuenta | Registro, login con email **o** username, sesión que se renueva sola, logout con revocación, recuperación de contraseña con código de 6 dígitos por email. |
+| Buscar | Búsqueda de libros (caché MySQL + Open Library en el servidor), detalle del libro con reseñas públicas. |
+| Lecturas | Añadir/editar/eliminar una lectura (`reading_log`): estado `leyendo`/`terminado`/`abandonado`, página actual, 1–5 estrellas, fechas, texto libre y visibilidad pública/privada. Borrador automático local. |
+| Cronómetro | Sesiones de lectura cronometradas en un servicio en primer plano (notificación persistente); al terminar se guardan minutos y páginas. |
+| Feed | Feed global paginado por cursor, caché offline, banner de publicaciones nuevas, like optimista, compartir enlace (`https://nacholoz3d.cl/libro/<external_id>`), dos vistas (tarjetas / compacta). |
+| Biblioteca | Pestaña propia con filtros por estado, contadores y acceso al cronómetro y a las estadísticas por libro. |
+| Perfil | Reto anual, estadísticas acumuladas, privacidad (perfil y estadísticas), 4 temas, vista del feed. Perfiles públicos de otros usuarios respetando candados. |
+
+### Repositorios y entornos
+
+| Pieza | Dónde | Notas |
+|---|---|---|
+| App Flutter | este repo (`test_lectorapp`, rama `main`) | El paquete Dart se sigue llamando `test_lectorapp`. |
+| API | repo hermano `../Lectorapp API` (Node.js + Express 5 + MySQL) | **Único lugar donde se modifica el backend.** |
+| Espejo de la API | `backend/` en este repo | **Solo lectura.** Copia del repo de la API en el commit `9b73636` (= API 1.0.0). El repo de la API puede ir por delante. |
+| Producción | `https://api.nacholoz3d.cl/api` | Servidor Docker; ver §9. |
+| Web pública | `https://nacholoz3d.cl/libro/<external_id>` | Front web antiguo (`lectorFront`, Ionic); destino de los enlaces compartidos. No está en este repo. |
+
+> **⚠️ `backend/` no es la carpeta de desarrollo de la API** (lo dice `backend/Intrucciones.txt`).
+> Sirve para leer controladores, validadores y SQL sin salir del repo. Cualquier cambio real va en
+> `../Lectorapp API` y después se re-sincroniza el espejo (§9).
+
+### Historia resumida (hasta 1.0.0)
+
+1. Proyecto inicial full-stack (UI Flutter + API Node) y snapshot con íconos/splash.
+2. **Robustez:** `ApiClient` único, logout real, booleanos tolerantes, URL de la API por `--dart-define`, HTTP solo en debug.
+3. **Rendimiento:** feed por cursor, conteo liviano de novedades, arranque en paralelo.
+4. **Seguridad Android:** R8, backup desactivado, solo HTTPS, servicio del cronómetro no exportado; lints estrictos.
+5. **Plataforma:** ícono adaptativo con capa monocroma, splash claro/oscuro, 90/120 Hz fiable, cambio de ID a `com.nacholoz3d.lectorapp`, vista previa en Chrome.
+6. **Diseño y accesibilidad:** tokens de color de dos tonos (pastel + ink) con contraste verificado por tests, formulario único de lectura con borrador, feed/perfil accesibles, estados vacíos y de error, nueva navegación (Inicio · Biblioteca · Perfil).
+7. **Cuenta:** recuperación de contraseña por email y refresh tokens rotativos → **release 1.0.0** (2026-11-08, ver `CHANGELOG.md`).
 
 ---
 
-## 2. Stack Tecnológico y Librerías (`pubspec.yaml`)
+## 2. Stack y dependencias (`pubspec.yaml`)
 
-### Entorno Base
+- **Dart SDK** `^3.0.0`, Material 3 (`useMaterial3: true`). Versión de la app: `1.0.0+1`.
+- **Linter:** `flutter_lints ^4.0.0` + reglas extra en `analysis_options.yaml`
+  (`use_build_context_synchronously`, `unawaited_futures`, `cancel_subscriptions`, `close_sinks`,
+  `prefer_const_constructors`, `prefer_const_declarations`, `always_declare_return_types`,
+  `avoid_catching_errors`, `unnecessary_null_checks`, `unrelated_type_equality_checks`).
+  **`flutter analyze` debe quedar en "No issues found!".**
+- **Android:** Kotlin Gradle Plugin `2.2.20`, AGP `8.7.0`, Gradle `8.10.2`, Java 11 con *core library desugaring*.
 
-- **SDK Dart:** `^3.0.0` (Flutter Material Design habilitado)
-- **Versión actual:** `1.0.0+1`
-- **Linter:** `flutter_lints: ^4.0.0` + reglas extra en `analysis_options.yaml` (`use_build_context_synchronously`, `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `prefer_const_*`, `always_declare_return_types`, `avoid_catching_errors`, …). `flutter analyze` debe quedar **sin issues**.
-- **Android:** Kotlin Gradle Plugin `2.2.20`, AGP `8.7.0`, Gradle `8.10.2`.
+| Librería | Versión | Uso |
+|:--|:--|:--|
+| `http` | `^1.1.0` | REST, siempre a través de `ApiClient` (un `http.Client` reutilizado, keep-alive). |
+| `flutter_secure_storage` | `^10.3.1` | Sesión cifrada: `auth-token` (JWT) y `refresh-token`. |
+| `shared_preferences` | `^2.2.2` | Datos no sensibles (ver tabla de claves en §4.6). |
+| `cached_network_image` | `^3.3.1` | Portadas y avatares con caché en disco y `precacheImage`. |
+| `flutter_background_service` | `^5.0.1` | Cronómetro en un isolate aparte (servicio en primer plano). |
+| `flutter_local_notifications` | `^17.1.2` | Canal `reading_timer_channel` y permiso de notificaciones. |
+| `google_fonts` | `^6.2.1` | **Lora** (títulos) y **Nunito** (cuerpo). |
+| `intl` | `^0.19.0` | Fechas en español (`initializeDateFormatting('es')`). |
+| `share_plus` | `^10.1.2` | Compartir enlaces de libros. |
+| `flutter_displaymode` | `^0.6.0` | Pedir el modo de mayor refresco en Android. |
+| `cupertino_icons` | `^1.0.2` | Íconos (dependencia de plantilla). |
 
-### Dependencias Principales
+Dev: `flutter_test`, `flutter_launcher_icons ^0.14.4` (≥ 0.14 por la capa `monochrome`),
+`flutter_native_splash ^2.3.1`.
 
-| Librería                       | Versión    | Uso en el proyecto                                                                                                                     |
-| :------------------------------ | :---------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| `http`                        | `^1.1.0`  | Peticiones REST hacia la API mediante el wrapper centralizado `ApiClient` (un único `http.Client` reutilizado, keep-alive).          |
-| `flutter_secure_storage`      | `^10.3.1` | Almacenamiento cifrado de la sesión: JWT de acceso (`auth-token`) y refresh token (`refresh-token`).                                                                                       |
-| `shared_preferences`          | `^2.2.2`  | Persistencia ligera: datos de usuario (`user-data`: solo `id`, `username`, `avatar`), tema activo (`app_theme`), vista del feed (`feed_layout`), borradores de lecturas (`reading_draft_*`) y caché offline del feed (`cached_global_feed`). |
-| `cached_network_image`        | `^3.3.1`  | Caché en disco/memoria y pre-decodificación (`precacheImage`) de portadas de libros y avatares.                                    |
-| `flutter_background_service`  | `^5.0.1`  | Ejecución del cronómetro de lectura en un *isolate* separado en segundo plano (`TimerBackgroundService`).                        |
-| `flutter_local_notifications` | `^17.1.2` | Canal de notificaciones en Android (`reading_timer_channel`) para el servicio en primer plano del temporizador.                      |
-| `google_fonts`                | `^6.2.1`  | Tipografías del sistema de diseño: **Lora** (títulos/serif) y **Nunito** (cuerpo/sans-serif).                           |
-| `intl`                        | `^0.19.0` | Formateo de fechas localizado en español (`es`).                                                                                    |
-| `share_plus`                  | `^10.1.2` | Compartir reseñas y enlaces de libros de forma nativa.                                                                                |
-| `flutter_displaymode`         | `^0.6.0`  | Activación de alta tasa de refresco (120Hz/90Hz) en dispositivos Android compatibles al iniciar la app.                               |
-
-### Dependencias de Desarrollo y Recursos
-
-- `flutter_launcher_icons: ^0.13.1` y `flutter_native_splash: ^2.3.1` configurados con fondo crema (`#FDFBF7`) y `assets/logo.png`.
-- `flutter_test` con tests unitarios en `test/`.
+**La carpeta `assets/` no se empaqueta en la app** (no hay sección `assets:` en `pubspec.yaml`): solo
+contiene las imágenes fuente de íconos y splash (`assets/icon/*`). Si la UI necesita una imagen,
+declararla individualmente.
 
 ---
 
-## 3. Estructura de Directorios
+## 3. Estructura de directorios
 
 ```text
 test_lectorapp/
-├── android/
-│   └── app/
-│       ├── build.gradle.kts          # Release: R8 (minify + shrink), firma PENDIENTE (usa claves debug)
-│       ├── proguard-rules.pro        # Keeps para flutter_local_notifications (Gson) y background_service
-│       └── src/
-│           ├── main/AndroidManifest.xml   # allowBackup=false, solo HTTPS, servicio no exportado
-│           ├── main/res/xml/data_extraction_rules.xml
-│           └── debug/                # SOLO debug: permite HTTP a 10.0.2.2/localhost (API local)
-├── assets/
-│   ├── logo.png                      # Logo principal y splash
-│   └── logo_padded.png
-├── backend/                          # [SOLO LECTURA] Espejo de referencia de la API Node.js/Express
+├── CLAUDE.md · README.md · CHANGELOG.md
+├── BACKLOG.md                        # Trabajo planificado posterior a 1.0.0
+├── PENDIENTES.md                     # Tareas no bloqueantes (firma de release, iOS, deuda técnica)
+├── analysis_options.yaml             # Lints del proyecto
+├── docs/guia-autenticacion.md        # Receta reutilizable: refresh tokens + recuperación (API y Flutter)
+├── .claude/
+│   ├── agents/                       # desarrollador.md, revisor.md (flujo de §11)
+│   └── skills/                       # lectorapp-design-system, -accessibility, -ux-patterns, -ui-review
+├── android/app/
+│   ├── build.gradle.kts              # ID com.nacholoz3d.lectorapp; release con R8; FIRMA PENDIENTE (claves debug)
+│   ├── proguard-rules.pro            # Keeps: flutter_local_notifications (Gson) y background_service
+│   └── src/
+│       ├── main/AndroidManifest.xml  # allowBackup=false, cleartext=false, servicio dataSync no exportado
+│       ├── main/res/xml/data_extraction_rules.xml
+│       └── debug/                    # SOLO debug: HTTP permitido hacia 10.0.2.2 y localhost
+├── ios/                              # Plantilla sin configurar (bundle ID com.example.helloWorld)
+├── web/                              # Solo para vista previa de diseño en Chrome
+├── assets/icon/                      # Fuentes de ícono/splash (no se empaquetan)
+├── backend/                          # [SOLO LECTURA] espejo de la API (ver §8)
 ├── lib/
-│   ├── main.dart                     # Punto de entrada: inits en paralelo (Future.wait) y auto-login JWT
-│   ├── config.dart                   # baseUrl (vía --dart-define API_BASE_URL) y navigatorKey
-│   ├── book_cover.dart               # Widget reutilizable de portada con sombra, caché y fallback
-│   ├── theme/
-│   │   └── lector_colors.dart        # ThemeExtension con tokens de color (accent/ink/textSecondary/estados) → context.lector
+│   ├── main.dart                     # Inits en paralelo, decisión de sesión, MaterialApp con tema reactivo
+│   ├── config.dart                   # Config.baseUrl (--dart-define API_BASE_URL) y Config.navigatorKey
+│   ├── book_cover.dart               # BookCover: portada con sombra, caché y placeholder con el título
+│   ├── theme/lector_colors.dart      # ThemeExtension LectorColors → context.lector
 │   ├── models/
-│   │   ├── book.dart                 # Modelo Book (normaliza external_id/google_id y author/authors) — SIN USO actualmente
-│   │   ├── reading_log_draft.dart    # Estado del formulario de lectura + borrador local (SharedPreferences)
-│   │   ├── reading_log.dart          # Modelo ReadingLog (estado, progreso, likes, reseña, safeAvatarUrl)
-│   │   └── user_profile.dart         # Modelo UserProfile (datos de usuario, flags de privacidad y biblioteca)
+│   │   ├── reading_log.dart          # ReadingLog.fromJson, safeAvatarUrl, toLogPayload
+│   │   ├── user_profile.dart         # UserProfile.fromJson (incluye library: List<ReadingLog>)
+│   │   ├── reading_log_draft.dart    # ReadingLogDraft (estado del formulario) + ReadingLogDraftStore
+│   │   └── book.dart                 # Book — definido pero SIN USO
 │   ├── services/
-│   │   ├── api_client.dart           # Singleton HTTP: sesión en memoria, renovación automática (refresh), timeout 15s, errores → ApiException
-│   │   ├── auth_service.dart         # Login/registro (vía ApiClient), logout con revocación, validación local de JWT
-│   │   ├── book_service.dart         # Búsqueda de libros y feed de reseñas por libro (NO es singleton)
-│   │   ├── reading_service.dart      # Singleton: feed por cursor, new-count, caché, CRUD logs, likes, sesiones, stats
-│   │   ├── user_service.dart         # Singleton: perfil, biblioteca paginada, stats, meta anual, privacidad
-│   │   ├── preferences_service.dart # Preferencias de UI locales: vista del feed (FeedLayout cards/compact)
-│   │   ├── theme_service.dart        # Singleton de temas con ValueNotifier<ThemeData> y 4 paletas pastel
-│   │   └── timer_background_service.dart # Isolate y controlador del cronómetro en segundo plano
-│   ├── ui/
-│   │   └── feedback.dart             # showSuccess / showError / friendlyError: mensajes con voz y estilo comunes
-│   ├── utils/
-│   │   └── json_utils.dart           # asBool / asInt: lectura tolerante de JSON (bool o 1/0, int o String)
+│   │   ├── api_client.dart           # Singleton HTTP: sesión, refresh automático, errores → ApiException
+│   │   ├── auth_service.dart         # login / register / forgot / reset / logout / isJwtValid
+│   │   ├── reading_service.dart      # Feed, caché, CRUD de lecturas, likes, sesiones, stats; libraryChanges
+│   │   ├── user_service.dart         # Perfil, biblioteca de un usuario, stats, meta, privacidad
+│   │   ├── book_service.dart         # Búsqueda y reseñas por libro (NO es singleton)
+│   │   ├── theme_service.dart        # 4 paletas, _buildTheme, ValueNotifier<ThemeData>, titleStyle, radios
+│   │   ├── preferences_service.dart  # FeedLayout (cards/compact) en ValueNotifier
+│   │   ├── display_mode_service.dart # 90/120 Hz tras el primer frame y en cada onResume
+│   │   └── timer_background_service.dart # onStart (isolate) + fachada estática TimerBackgroundService
+│   ├── ui/feedback.dart              # showSuccess / showError / friendlyError / unawaitedHaptic
+│   ├── utils/json_utils.dart         # asBool / asInt
 │   ├── screens/
-│   │   ├── login_screen.dart         # Inicio de sesión (acepta email o username) + "¿Olvidaste tu contraseña?"
-│   │   ├── forgot_password_screen.dart # Recuperar cuenta: email → código de 6 dígitos + contraseña nueva
-│   │   ├── register_screen.dart      # Registro con validación local (mismas reglas que la API)
-│   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar: Inicio · Biblioteca · Perfil (TabsScreen.select)
-│   │   ├── home_screen.dart          # Tab 0: saludo plegable, barra de búsqueda, "Sigues leyendo" y feed por cursor
-│   │   ├── library_screen.dart       # Tab 1: Mi biblioteca completa, filtros por estado, acceso al cronómetro
-│   │   ├── profile_screen.dart       # Tab 2: perfil, reto anual y estadísticas; tuerca = privacidad, apariencia, vista del feed
-│   │   ├── search_screen.dart        # Pantalla apilada (openSearch) desde la barra de Inicio; debounce 300ms, mín. 3 caracteres
-│   │   ├── public_profile_screen.dart# Perfil de otros usuarios (respeta candados de privacidad)
-│   │   └── book_detail_screen.dart   # Vista detallada de un libro con fondo blur inmersivo y reseñas
+│   │   ├── login_screen.dart · register_screen.dart · forgot_password_screen.dart
+│   │   ├── tabs_screen.dart          # IndexedStack + BottomNavigationBar; TabsScreen.select(context, i)
+│   │   ├── home_screen.dart          # Tab 0: saludo plegable, barra de búsqueda, "Sigues leyendo", feed
+│   │   ├── library_screen.dart       # Tab 1: Mi biblioteca (filtros, contadores, cronómetro)
+│   │   ├── profile_screen.dart       # Tab 2: reto anual, estadísticas, ajustes (⚙)
+│   │   ├── search_screen.dart        # Pantalla apilada; función global openSearch(context)
+│   │   ├── book_detail_screen.dart   # Detalle con fondo blur + reseñas + FAB "Añadir a mi biblioteca"
+│   │   └── public_profile_screen.dart# Perfil ajeno: Biblioteca / Estadísticas, candados de privacidad
 │   └── widgets/
-│       ├── user_card.dart            # Lectura en el feed (vista tarjetas o compacta) o reseña de un libro ('review')
-│       ├── library_book_tile.dart    # Fila de libro de Mi biblioteca (editar / estadísticas)
-│       ├── status_chip.dart          # StatusChip + statusLabel ('Leyendo'/'Terminado'/'Lo dejé') + ícono
-│       ├── state_views.dart          # EmptyState / ErrorState (estados vacíos y de error con acción)
-│       ├── reading_log_sheet.dart    # Formulario único añadir/editar lectura: borrador automático, aviso al descartar, validación
-│       ├── star_rating_input.dart    # Estrellas 0–5 accesibles (un control ajustable para TalkBack)
-│       ├── log_book_modal.dart       # Envoltorio de ReadingLogSheet (añadir) → {'saved': true}
-│       ├── edit_book_modal.dart      # Envoltorio de ReadingLogSheet (editar/eliminar) → {'action': ...}
-│       ├── reading_timer_modal.dart  # BottomSheet del cronómetro conectado a TimerBackgroundService
-│       ├── book_stats_modal.dart     # BottomSheet con métricas específicas de un libro
-│       └── book_loader.dart          # Animación 3D personalizada de páginas pasando (Custom Loader)
-├── test/
-│   └── models_and_utils_test.dart    # Tests de asBool, modelos, isJwtValid y extracción de errores
-└── pubspec.yaml
+│       ├── reading_log_sheet.dart    # ÚNICO formulario de lectura (añadir y editar)
+│       ├── log_book_modal.dart · edit_book_modal.dart   # Envoltorios finos de ReadingLogSheet
+│       ├── user_card.dart            # Lectura en el feed (cards/compact) o reseña ('review')
+│       ├── library_book_tile.dart    # Fila de Mi biblioteca (editar / estadísticas)
+│       ├── reading_timer_modal.dart  # UI del cronómetro
+│       ├── book_stats_modal.dart     # Métricas de un libro
+│       ├── status_chip.dart          # StatusChip, statusLabel, statusIcon
+│       ├── star_rating_input.dart    # Estrellas 0–5 accesibles
+│       ├── state_views.dart          # EmptyState / ErrorState
+│       └── book_loader.dart          # Loader animado (páginas de un libro)
+└── test/                             # 5 archivos, 47 tests (ver §10)
 ```
 
+`.vscode/` (configuraciones de ejecución y la tarea `adb reverse`) **está en `.gitignore`**: existe en
+la máquina del autor pero no en un clon limpio. Los comandos equivalentes están en §9.
+
 ---
 
-## 4. Arquitectura y Patrones Clave
+## 4. Arquitectura de la app
 
-### 4.1 Gestión de Estado y Navegación
+### 4.1 Capas
 
-- **Estado Local + Singletons:** El proyecto no utiliza librerías externas pesadas de gestión de estado (como Bloc o Riverpod). En su lugar, emplea `StatefulWidget` para el estado de las vistas, `AutomaticKeepAliveClientMixin` en las pestañas principales (`HomeScreen`, `LibraryScreen`, `ProfileScreen`) dentro de un `IndexedStack` para preservar el scroll y los datos en memoria, y servicios **Singleton** (`ApiClient`, `AuthService`, `ReadingService`, `UserService`, `ThemeService`, `PreferencesService`).
-- **Reactividad del Tema:** `ThemeService` expone un `ValueNotifier<ThemeData> currentTheme` escuchado en la raíz (`LectorApp` en `main.dart`) mediante `ValueListenableBuilder`.
-- **Navegación Global en Errores 401:** `Config.navigatorKey` (`GlobalKey<NavigatorState>`) está inyectada en `MaterialApp`. Si una petición de `ApiClient` devuelve `401`, el cliente ejecuta `clearSession()` (token, `user-data` y `cached_global_feed`) y redirige a `LoginScreen` limpiando el stack. Un flag evita que varias peticiones con 401 simultáneas apilen varias pantallas de login.
+```text
+screens/ + widgets/   StatefulWidget con setState. Sin Bloc/Riverpod/Provider.
+        │  llaman a
+services/             Singletons sin estado de UI. Devuelven Map/List crudos de la API.
+        │  usan
+ApiClient             Único punto de salida HTTP. Sesión, renovación, errores.
+        │
+API REST (Config.baseUrl)
+```
 
-### 4.2 Cliente HTTP y Autenticación (`ApiClient` & `AuthService`)
+- **Estado:** local a cada pantalla. Lo compartido entre pantallas se expone como `ValueNotifier` en un singleton:
+  - `ThemeService().currentTheme` → escuchado en la raíz (`LectorApp`) con `ValueListenableBuilder`.
+  - `PreferencesService().feedLayout` → escuchado por `HomeScreen`.
+  - `ReadingService().libraryChanges` (contador) → se incrementa en `createLog`, `updateLog`, `deleteLog` y `recordSession`; lo escuchan `HomeScreen` (tarjeta "Sigues leyendo"), `LibraryScreen` y `ProfileScreen` para recargar en silencio.
+- **Datos:** casi toda la UI trabaja con `Map<String, dynamic>` crudos (feed, `UserCard`, búsqueda, detalle, modales). Los modelos tipados se usan en `LibraryScreen`, `LibraryBookTile`, `ProfileScreen` y `PublicProfileScreen` (`ReadingLog`, `UserProfile`). Cuando un widget tipado abre un modal, reconstruye un `Map` (`LibraryBookTile._logMap`).
+- **Imports:** conviven relativos (`../services/...`) y de paquete (`package:test_lectorapp/...`). En código nuevo, relativos.
 
-- **URL Base:** `lib/config.dart` la lee de `--dart-define=API_BASE_URL=...`; si no se pasa, usa **producción** (`https://api.nacholoz3d.cl/api`). **No editar `config.dart` para desarrollo** (ver §7 y las configuraciones de `.vscode/launch.json`).
-  - Emulador Android: `http://10.0.2.2:3000/api`
-  - Teléfono físico: `http://localhost:3000/api` + `adb reverse tcp:3000 tcp:3000`
-- **TODA llamada HTTP pasa por `ApiClient`**, incluidos login y registro. `ApiClient` tiene un único método interno `_send` y expone `get/post/put/delete`.
-- **`redirectOn401: false`** en `post()` para login, registro, logout y recuperación: ahí un 401 significa "credenciales inválidas", no "sesión expirada" (no se intenta renovar ni se va a Login).
-- **Sesión con refresh token:** el JWT de acceso dura **30 min**; el refresh token (opaco, **60 días**, rotativo) lo renueva. `ApiClient` renueva solo: antes de pedir si el acceso ya venció, y ante un 401 (reintenta una vez). Varias peticiones simultáneas comparten **una** renovación (`_refreshing`). Si la API rechaza el refresh (401/400) → `clearSession()` y Login; si falla la red o el servidor (5xx/429) la sesión se conserva.
-- **Manejo de Errores:** timeout de 15 s. Toda falla se convierte en `ApiException(message, statusCode)`:
-  - HTTP 4xx/5xx → mensaje del campo `error` (o `message`) del JSON del backend.
-  - Cuerpo no-JSON (ej. HTML de Nginx en un 502) → mensaje genérico, sin `FormatException`.
-  - `TimeoutException`, `SocketException`, `ClientException` → mensajes amigables con `statusCode: 0`.
-- **Caché de sesión en memoria:** `ApiClient().loadToken()` lee ambos tokens de `FlutterSecureStorage` una sola vez al arrancar.
-- **Arranque:** hay sesión si el JWT sigue vigente (`AuthService.isJwtValid`, solo lee `exp`) **o** hay refresh token; no se espera a la red (la primera petición renueva). Una sesión antigua sin refresh y vencida se limpia localmente.
-- **Logout:** `AuthService.logout()` llama a `POST /auth/logout` con el refresh token (revoca acceso + sesión larga en el servidor; si no hay red, no bloquea) y luego `clearSession()`.
+### 4.2 Arranque (`main.dart`)
 
-### 4.3 Normalización de Datos y Quirks del Backend
+1. `WidgetsFlutterBinding.ensureInitialized()`.
+2. `Future.wait` de inits independientes: `TimerBackgroundService.initializeService()`, `initializeDateFormatting('es')`, `ThemeService().loadTheme()`, `PreferencesService().load()`, `ApiClient().loadToken()`.
+3. **Decisión de sesión sin red:** hay sesión si el JWT sigue vigente (`AuthService.isJwtValid`) **o** existe refresh token. Un token viejo vencido y sin refresh se limpia (`clearSession`).
+4. `runApp(LectorApp(initialScreen: TabsScreen | LoginScreen))`.
+5. `DisplayModeService.init()` (después de `runApp`: en `main()` la ventana aún no existe).
 
-0. **Uso real de los modelos:** La mayor parte de la app (feed de `HomeScreen`, `UserCard`, búsqueda, detalle de libro, modales) trabaja con `Map<String, dynamic>` crudos de la API. Los modelos tipados se usan en los perfiles (`ReadingLog.fromJson`, `UserProfile.fromJson`). El modelo `Book` está definido pero no se usa.
-1. **Lectura tolerante:** usar siempre `asBool(...)` / `asInt(...)` de `lib/utils/json_utils.dart` al leer booleanos o enteros de un `Map` de la API. MySQL guarda booleanos como `1`/`0`; el backend actual normaliza a `true`/`false` (`has_liked`, `is_log_public`, `is_profile_public`, `are_stats_public`) y `likes_count` a número, pero la caché local o respuestas antiguas pueden traer enteros o strings.
-2. **Discrepancias de Nombres de Campos** (normalizadas en modelos y algunos widgets):
+### 4.3 Navegación
+
+- `MaterialApp` con `home:` y `Navigator.push(MaterialPageRoute(...))`. **No hay rutas con nombre ni router.**
+- `TabsScreen`: `IndexedStack` con `HomeScreen`, `LibraryScreen`, `ProfileScreen` (todas con `AutomaticKeepAliveClientMixin`, conservan scroll y datos). `TabsScreen.select(context, TabsScreen.profile)` cambia de pestaña desde un hijo.
+- La búsqueda no es pestaña: `openSearch(context)` (definida en `search_screen.dart`) apila `SearchScreen`.
+- Formularios y paneles son `showModalBottomSheet(isScrollControlled: true, backgroundColor: Colors.transparent)`.
+- `Config.navigatorKey` permite a `ApiClient` navegar a `LoginScreen` (limpiando el stack) cuando la sesión termina de verdad.
+- Tras login/registro/reset: `pushReplacement` / `pushAndRemoveUntil` a `TabsScreen`.
+
+### 4.4 `ApiClient` y sesión
+
+- **Toda llamada HTTP pasa por `ApiClient()`** (`get/post/put/delete` → `_send` → `_request` → `_parse`), incluidos login y registro. Timeout de 15 s. Cabeceras JSON + `Authorization: Bearer` (salvo en `/auth/refresh`).
+- **Sesión:** JWT de acceso (**30 min**) + refresh token opaco (**60 días**, rotativo), ambos en `FlutterSecureStorage` y cacheados en memoria (`loadToken()` al arrancar).
+- **Renovación automática:**
+  1. Antes de pedir: si el acceso está vencido (`isAccessTokenExpired`, margen de 30 s) y hay refresh, renueva primero.
+  2. Ante un `401`: renueva una vez y reintenta la petición.
+  3. Peticiones simultáneas comparten **una** renovación (`_refreshing`).
+  4. Refresh rechazado (`401`/`400`) → `clearSession()` + Login (flag `_isRedirectingToLogin` evita apilar varias pantallas) + `ApiException(401)`.
+  5. Fallo de red o `5xx`/`429` al renovar → **la sesión se conserva**; sube la `ApiException`.
+- **`redirectOn401: false`** (solo existe en `post`) marca la petición como no autenticada: no intenta renovar ni redirige. Se usa en login, registro, logout, forgot y reset, donde un 401 significa "credenciales inválidas".
+- **Errores:** todo falla como `ApiException(message, statusCode)`.
+  - 4xx/5xx → campo `error` (o `message`) del JSON.
+  - Cuerpo no JSON (HTML de Nginx en un 502) → mensaje genérico, nunca `FormatException`.
+  - `TimeoutException` / `SocketException` / `ClientException` → mensaje amigable, `statusCode: 0`.
+- **`clearSession()`** borra ambos tokens, `user-data` y `cached_global_feed`.
+- **Logs:** solo en `kDebugMode`, método + URL + status. Nunca bodies (pueden llevar contraseñas).
+- Hay dos lectores de `exp` con propósitos distintos: `AuthService.isJwtValid` (arranque, sin margen) y `ApiClient.isAccessTokenExpired` (margen de 30 s). Ninguno valida la firma: eso lo hace la API.
+- **Tests:** `ApiClient().httpClientForTesting = MockClient(...)` (ver `test/api_client_refresh_test.dart`).
+
+`AuthService`: `login(identifier, password)` envía `email` si contiene `@`, si no `username`.
+`_saveSession` guarda tokens y en `user-data` **solo** `id`, `username`, `avatar` (el email no se
+persiste sin cifrar). `logout()` llama a `POST /auth/logout` con el refresh token (si falla la red,
+igual cierra la sesión local).
+
+### 4.5 Flujos principales
+
+**Feed (`HomeScreen`)**
+- *Offline-first:* muestra `cached_global_feed` tras pre-decodificar portadas/avatares de los 5 primeros ítems (`_precacheVisibleCovers`, timeout 3 s); luego consulta el conteo de novedades. Sin caché → `loadFeed()`.
+- *Cursor:* `GET /readings/feed?limit=10&before_id=<id del último>`. **No usar `page`/OFFSET en el feed** (duplicaba o saltaba publicaciones).
+- *Banner de novedades:* `GET /readings/feed/new-count?after_id=<id del primero>` → `{count}`; tocarlo sube al inicio y recarga.
+- *Like optimista:* invierte al instante y confirma/revierte con la respuesta. La publicación se localiza **por `id`**, no por índice (el feed puede recargarse durante la petición).
+- *Errores:* si ya hay contenido se conserva y se avisa con SnackBar + "Reintentar"; solo sin contenido se muestra `ErrorState`.
+- *Cabecera:* `SliverAppBar` con saludo según la hora que se pliega a "LectorApp" + avatar (→ pestaña Perfil); barra "¿Qué estás leyendo?" (→ `openSearch`); tarjeta **"Sigues leyendo"** = primera lectura `leyendo` de `my-library?page=1&limit=50` (→ `EditBookModal`).
+- *Vistas:* `UserCard(layout: FeedLayout.cards | compact)`.
+
+**Formulario de lectura (`ReadingLogSheet`)** — el único formulario para añadir y editar.
+- `LogBookModal(book)` → devuelve `{'saved': true}`; `EditBookModal(readingLog)` → `{'action': 'updated' | 'deleted'}`.
+- **Borrador automático:** cada cambio programa un guardado a 800 ms en `SharedPreferences` (`reading_draft_log_<id>` al editar, `reading_draft_book_<external_id>` al añadir). Al abrir, si hay borrador distinto del estado inicial, se restaura con un aviso y opción "Descartar". Se borra al guardar, al eliminar o al descartar.
+- `PopScope` bloquea el cierre con cambios sin guardar ("¿Descartar los cambios?"). Si el guardado falla, la hoja queda abierta con todo lo escrito.
+- Reglas: al añadir, por defecto `leyendo`, inicio hoy, **privado**. Página actual solo en `leyendo`; estrellas solo fuera de `leyendo`; `finish_date` solo en `terminado` (al elegirlo propone hoy y completa la página con `page_count`). Validación local: página ≤ `page_count`, término ≥ inicio, reseña ≤ 5000.
+- Payload: `logData = {status, rating|null, review_text, start_date, finish_date, is_log_public, current_page}`; al crear, `{bookData: {external_id, title, authors, cover_url, isbn, page_count, published_year}, logData}`.
+
+**Biblioteca (`LibraryScreen`)** — carga la biblioteca **completa** (`my-library` en páginas de 50, tope de 20 páginas) para que filtros y contadores sean exactos en cliente. Filtros `leyendo` / `terminado` / `abandonado` con `SegmentedButton`; si no hay nada "leyendo" abre en el primer filtro con libros. Tarjeta "Empezar a leer" → `ReadingTimerModal`.
+
+**Perfiles** — `GET /users/:username` ya trae la primera página de `library`. `ProfileScreen` (propio) la usa para el reto y las estadísticas (`/users/:username/stats`); `PublicProfileScreen` pagina el resto con `/users/:username/library?page=N` y solo pide stats si el perfil es público.
+
+**Búsqueda (`SearchScreen`)** — debounce de 300 ms, mínimo 3 caracteres; cada resultado abre `BookDetailScreen` o, con el botón `+`, `LogBookModal`.
+
+**Compartir** — `UserCard._share()` comparte `https://nacholoz3d.cl/libro/<external_id>`.
+
+### 4.6 Almacenamiento local
+
+| Dónde | Clave | Contenido |
+|---|---|---|
+| SecureStorage | `auth-token` | JWT de acceso |
+| SecureStorage | `refresh-token` | Refresh token opaco |
+| SharedPreferences | `user-data` | JSON `{id, username, avatar}` |
+| SharedPreferences | `cached_global_feed` | Primera página del feed (JSON) |
+| SharedPreferences | `app_theme` | `light` \| `pink` \| `blue` \| `dark` |
+| SharedPreferences | `feed_layout` | `cards` \| `compact` |
+| SharedPreferences | `reading_draft_<id>` | Borrador de formulario (uno por libro o registro) |
+
+No hay base de datos local. Los borradores y preferencias **no** se borran al cerrar sesión.
+
+### 4.7 Cronómetro en segundo plano
+
+- `onStart(ServiceInstance)` (`@pragma('vm:entry-point')`) corre en **otro isolate**: no puede usar el estado de la app ni plugins de UI. Toda comunicación es por mensajes:
+  - UI → servicio: `startTimer {bookTitle, selectedLog, seconds}`, `pauseTimer`, `resumeTimer`, `stopTimer`, `stopService`.
+  - Servicio → UI: `ready` (una vez, listeners registrados) y `update {seconds, isRunning, isFinished, selectedLog}` cada segundo mientras corre y tras cada comando.
+- `TimerBackgroundService.start()` se suscribe a `ready` **antes** de `startService()` y espera como máximo 3 s. No usar esperas fijas.
+- El tiempo se calcula con `DateTime.now().difference(startTime)` + `accumulatedSeconds` (no cuenta ticks: el SO puede suspender el hilo).
+- Android: servicio en primer plano tipo `dataSync`, notificación id `888`, canal `reading_timer_channel` (importancia baja, sin sonido). `autoStart: false`. El permiso de notificaciones se pide al abrir `ReadingTimerModal`.
+- `TimerBackgroundService.isSupported` es `false` en web/escritorio: el modal se dibuja pero no cuenta.
+- `ReadingTimerModal`: al finalizar pide "páginas leídas" y "página actual" → `POST /readings/:id/session` con `duration_minutes = max(1, round(seg/60))` → `stopService()`. Solo reescribe el campo "página actual" cuando cambia el libro seleccionado, no en cada `update`.
+- El estado vive solo en la memoria del isolate: el modal se sincroniza con el siguiente `update`, así que un cronómetro **en pausa** no se refleja si el modal se cierra y se vuelve a abrir.
+
+### 4.8 Plataforma Android
+
+- **ID: `com.nacholoz3d.lectorapp`** (antes `com.nacholoz3d.test_lectorapp`). Se cambió porque HyperOS (Xiaomi, *Joyose*/*PowerKeeper*) tenía el ID viejo marcado como "juego" y forzaba 60 Hz. **No cambiarlo una vez publicado en Google Play.**
+- **Refresco:** `DisplayModeService` elige el modo de mayor Hz a la resolución actual (`pickBestMode`, testeado) tras el primer frame y en cada `onResume`.
+  Diagnóstico: `adb shell dumpsys SurfaceFlinger | grep displayManagerPolicy` y `adb shell dumpsys activity service com.xiaomi.joyose | grep IsGameForeground`.
+- **Manifest:** `allowBackup=false`, `usesCleartextTraffic=false`, `dataExtractionRules`; el servicio del plugin se redeclara con `exported=false` (`tools:replace`). Permisos: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`.
+- **Debug:** `src/debug/res/xml/network_security_config.xml` permite HTTP solo hacia `10.0.2.2` y `localhost`.
+- **Release:** R8 (`isMinifyEnabled` + `isShrinkResources`) con `proguard-rules.pro`. **La firma de release sigue usando las claves de debug** (pendiente antes de Google Play).
+- **Íconos/splash:** generados desde `assets/icon/` (todas con fondo transparente salvo `icon_legacy.png`). Regenerar desde una imagen opaca rompe el ícono temático y el splash.
+- **iOS** no está configurado (bundle ID de plantilla) y **web** solo sirve como vista previa de diseño.
+
+---
+
+## 5. Datos y quirks de la API
+
+1. **Lectura tolerante:** usar `asBool(...)` / `asInt(...)` (`lib/utils/json_utils.dart`) al leer booleanos o enteros de un `Map`. MySQL guarda booleanos como `1`/`0`; la API actual normaliza a `true`/`false`, pero la caché local o respuestas antiguas pueden traer enteros o strings.
+2. **Nombres de campo que varían** (la tabla `books` usa `author`; la búsqueda devuelve `authors`):
    - Autor: `json['authors'] ?? json['author']`
    - Portada: `json['cover_url'] ?? json['cover_image']`
-   - ID Externo: `json['external_id'] ?? json['google_id'] ?? json['id']` (solo en `Book`; `ReadingLog` usa únicamente `external_id`)
-3. **Avatares DiceBear (SVG a PNG):** el backend genera avatares por defecto con rutas `/svg`; `CachedNetworkImageProvider` no rasteriza SVG, así que siempre se reemplaza `/svg` por `/png` (getter `safeAvatarUrl` en `ReadingLog` y `UserProfile`).
-4. **Biblioteca en perfiles:** `GET /users/:username` ya incluye la **primera página** de la biblioteca (`library`). `ProfileScreen` y `PublicProfileScreen` la usan directamente y solo piden `/users/:username/library?page=N` para las páginas siguientes.
-
-### 4.4 Rendimiento en el Feed (`HomeScreen`)
-
-- **Carga Instantánea Offline-First:** muestra primero el feed guardado en `SharedPreferences` (`cached_global_feed`) tras pre-cachear las primeras 5 portadas/avatares (`_precacheVisibleCovers`, timeout de 3 s).
-- **Paginación por cursor:** las páginas siguientes se piden con `before_id = id del último elemento cargado` (`GET /readings/feed?limit=10&before_id=<id>`). No usar `page`/OFFSET en el feed: duplicaba o saltaba publicaciones cuando entraban nuevas.
-- **Banner "X nuevas publicaciones":** `GET /readings/feed/new-count?after_id=<id del primero>` devuelve solo `{ count }`.
-- **Refresco entre pestañas:** `ReadingService().libraryChanges` (ValueNotifier) se incrementa al crear/editar/borrar lecturas o guardar sesiones; `ProfileScreen` lo escucha y recarga (antes, un libro añadido desde Buscar no aparecía en Perfil hasta reiniciar).
-- **Optimistic UI en Likes:** `_handleToggleLike` invierte el estado al instante y lo confirma o revierte con la respuesta. La publicación se actualiza **por `id`**, no por índice (el feed puede recargarse durante la petición).
-
-### 4.5 Cronómetro en Segundo Plano (`TimerBackgroundService`)
-
-- Corre en un **isolate independiente** (`@pragma('vm:entry-point') void onStart(ServiceInstance service)`).
-- **Importante:** dentro de `onStart` no se puede acceder a plugins de UI ni al estado de la app; toda comunicación es por mensajes:
-  - UI → Servicio: `startTimer`, `pauseTimer`, `resumeTimer`, `stopTimer`, `stopService`.
-  - Servicio → UI: `'ready'` (una vez, cuando los listeners están registrados) y `'update'` cada segundo con `{ seconds, isRunning, isFinished, selectedLog }`.
-- `TimerBackgroundService.start()` espera el evento `'ready'` (timeout 3 s) antes de enviar `startTimer`; no usar esperas fijas.
-- El tiempo se calcula con `DateTime.now().difference(startTime!)` + `accumulatedSeconds` para no desfasarse cuando el SO suspende hilos.
-- `ReadingTimerModal` solo reescribe el campo "página actual" cuando cambia el libro seleccionado (no en cada `'update'`).
-
-### 4.6 Tasa de Refresco (90/120 Hz) y ID de la app
-
-- `DisplayModeService` (`lib/services/display_mode_service.dart`) pide el modo de mayor refresco tras el primer frame y en cada `onResume` (en `main()` la ventana aún no existe).
-- **ID de Android: `com.nacholoz3d.lectorapp`** (antes `com.nacholoz3d.test_lectorapp`). Se cambió porque HyperOS (Xiaomi, servicio *Joyose*/*PowerKeeper*) tenía el ID viejo marcado como "juego" y le imponía 60 Hz aunque la app pidiera 120 (voto `PRIORITY_MIUI_REFRESH_RATE`). No cambiar el ID una vez publicado en Google Play.
-- Diagnóstico en el teléfono: `adb shell dumpsys SurfaceFlinger | grep displayManagerPolicy` (rango `render` permitido) y `adb shell dumpsys activity service com.xiaomi.joyose | grep IsGameForeground`.
+   - ID externo: `json['external_id'] ?? json['google_id']` (y `?? json['id']` solo para libros de búsqueda/detalle)
+3. **Avatares DiceBear:** la API genera URLs `/svg`; `CachedNetworkImageProvider` no rasteriza SVG → reemplazar siempre `/svg` por `/png` (`safeAvatarUrl` en los modelos; a mano en `UserCard` y `HomeScreen`). Respaldo: `https://api.dicebear.com/7.x/bottts/png?seed=<username>`.
+4. **`id` del feed** = id del `reading_log` (es el cursor y el destino del like).
+5. **Fechas:** se envían `YYYY-MM-DD`; se reciben como ISO y se parsean con `DateTime.tryParse`.
+6. **Etiquetas de estado:** el valor de API no cambia (`abandonado`); en pantalla es "Lo dejé" (`statusLabel`).
 
 ---
 
-## 5. Contrato de la API
+## 6. Contrato de la API (v1.0.0)
 
-Todos los endpoints cuelgan de `Config.baseUrl`. Salvo `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password` y `/books/feed`, requieren `Authorization: Bearer <JWT>`.
+Base: `Config.baseUrl` (`https://api.nacholoz3d.cl/api`). Todo requiere `Authorization: Bearer <JWT>`
+**salvo** `/auth/*`, `/books/feed` y `/health`. Body JSON máx. 100 kb.
 
-### Formato de errores
+### Errores
 
-Todas las respuestas de error tienen la forma `{ "error": string, "code": string }`:
+Siempre `{ "error": string, "code": string }`:
 
 | HTTP | `code` | Cuándo |
 |---|---|---|
-| 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Body/query/params no cumplen el esquema Zod |
-| 401 | `UNAUTHORIZED` | Falta token, token inválido/expirado/revocado, credenciales inválidas |
-| 403 | `FORBIDDEN` | Recurso de otro usuario o privado |
+| 400 | `VALIDATION_ERROR`, `INVALID_JSON` | No cumple el esquema Zod / JSON mal formado |
+| 401 | `UNAUTHORIZED` | Sin token, token inválido/expirado/revocado, credenciales inválidas |
+| 403 | `FORBIDDEN` | Recurso ajeno o privado |
 | 404 | `NOT_FOUND` | Recurso o ruta inexistente |
-| 409 | `CONFLICT` | Email/username ya registrado, libro ya registrado por el usuario |
-| 429 | `RATE_LIMITED` | Demasiadas peticiones |
-| 500 | `INTERNAL_ERROR` | Error no controlado (el detalle solo va al log del servidor) |
+| 409 | `CONFLICT` | Email/username ya registrado; libro ya registrado por el usuario |
+| 413 | `PAYLOAD_TOO_LARGE` | Body mayor a 100 kb |
+| 429 | `RATE_LIMITED` | Límite de peticiones |
+| 500 | `INTERNAL_ERROR` | Error no controlado (el detalle solo va al log) |
 
-### Reglas de validación relevantes para la UI
+### Límites de peticiones (por IP)
+
+General 300 / 15 min. Login: 10 intentos **fallidos** / 5 min. Registro: 10 / hora. Forgot: 5 / hora.
+Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min.
+
+### Validación relevante para la UI
 
 - **Registro:** `username` `^[a-zA-Z0-9_.-]{3,30}$`; `email` válido (se guarda en minúsculas); `password` ≥ 8 caracteres y ≤ 72 bytes.
-- **Lecturas:**
-  - `status` ∈ `leyendo|terminado|abandonado`.
-  - `rating` entero de 1 a 5, o `null` (0 equivale a `null`).
-  - `review_text` ≤ 5000 caracteres.
-  - Fechas en formato `YYYY-MM-DD`, con `finish_date >= start_date`.
-  - `cover_url` solo de `covers.openlibrary.org` o Google Books (`https`).
-- **Sesiones:** `duration_minutes` de 1 a 1440; `pages_read` de 0 a 5000.
+- **Lecturas:** `status` ∈ `leyendo|terminado|abandonado`; `rating` entero 1–5 o `null` (0 ≡ `null`); `review_text` ≤ 5000; fechas `YYYY-MM-DD` con `finish_date >= start_date`; `cover_url` solo `https` de `covers.openlibrary.org` o Google Books.
+- **Sesiones:** `duration_minutes` 1–1440; `pages_read` 0–5000.
 - **Paginación:** `limit` ≤ 50.
 
-### Autenticación (`/auth`)
+### Endpoints
 
-- `POST /auth/login` — Body: `{ email | username, password }` → `{ token, refresh_token, user }`.
-- `POST /auth/register` — Body: `{ username, email, password }` → `201 { token, refresh_token, user }`.
-- `POST /auth/refresh` — Body: `{ refresh_token }` → `{ token, refresh_token }`. **Rota**: el usado queda revocado. Reusar uno ya rotado revoca toda la sesión (familia) → 401.
-- `POST /auth/logout` — Header `Authorization` (si el acceso sigue vigente, se agrega a la blacklist por hash) y/o body `{ refresh_token }` (revoca su familia). Al menos uno válido, si no → 401.
-- `POST /auth/forgot-password` — Body: `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Envía un código de 6 dígitos por email (vence en 15 min; 1 por minuto por cuenta; 5/hora por IP).
-- `POST /auth/reset-password` — Body: `{ email, code, password }` → `{ token, refresh_token, user }` (sesión nueva). Máx. 5 intentos por código; cierra todas las sesiones anteriores (también los refresh tokens) de la cuenta (`users.password_changed_at`). Código inválido/vencido → 400.
+**Auth (`/auth`)**
+- `POST /login` — `{ email | username, password }` → `{ token, refresh_token, user }`.
+- `POST /register` — `{ username, email, password }` → `201 { token, refresh_token, user }`.
+- `POST /refresh` — `{ refresh_token }` → `{ token, refresh_token }`. **Rota**: el usado queda revocado; reusar uno ya rotado revoca toda la familia → 401.
+- `POST /logout` — header `Authorization` (acceso vigente → blacklist por hash) y/o `{ refresh_token }` (revoca su familia). Al menos uno válido, si no 401.
+- `POST /forgot-password` — `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Código de 6 dígitos, vence en 15 min, 1 por minuto por cuenta.
+- `POST /reset-password` — `{ email, code, password }` → `{ token, refresh_token, user }`. Máx. 5 intentos por código; cierra todas las sesiones anteriores. Código inválido/vencido → 400.
 
-### Libros (`/books`)
+**Libros (`/books`)**
+- `GET /search?q=` — caché MySQL + Open Library (cacheado 10 min en el servidor) → `{ data: [...] }`.
+- `GET /feed?external_id=` — reseñas públicas de un libro (**sin auth**, máx. 100).
 
-- `GET /books/search?q=<query>` — Caché local MySQL + Open Library (resultados de Open Library cacheados 10 min en el servidor). → `{ data: [...] }`.
-- `GET /books/feed?external_id=<id>` — Reseñas públicas de un libro (público, máx. 100).
+**Lecturas (`/readings`)**
+- `GET /feed?limit=&before_id=` — feed global público por cursor.
+- `GET /feed/new-count?after_id=` — `{ count }`.
+- `GET /my-library?page=&limit=` — biblioteca del usuario autenticado.
+- `POST /` — `{ bookData, logData }` → `201 { logId }`; 409 si el libro ya está registrado.
+- `PUT /:id` — **parcial**: solo los campos enviados (`status`, `rating`, `review_text`, `start_date`, `finish_date`, `is_log_public`, `current_page`).
+- `DELETE /:id`
+- `POST /:id/like` — alterna → `{ liked, likes_count }`.
+- `POST /:id/session` — `{ duration_minutes, pages_read, current_page? }` (transacción).
+- `GET /:id/stats` — `{ total_minutes, total_sessions, avg_session_minutes, log_info }`.
 
-### Lecturas y Sesiones (`/readings`)
+**Usuarios (`/users`)**
+- `GET /:username` — `{ username, bio, avatar_url, is_profile_public, are_stats_public, is_own_profile, is_private_lock, library }`.
+- `GET /:username/library?page=&limit=`
+- `GET /:username/stats` — `{ total_minutes, total_pages, finished_books, finished_books_this_year, target_books_this_year, avg_rating, total_likes, year, is_private }` o `{ is_private: true }`. `total_pages` = por lectura, `page_count` si está terminada (y se conoce), si no `current_page`.
+- `POST /goal` — `{ target_books: 1..1000 }`.
+- `PUT /privacy` — `{ is_profile_public?, are_stats_public? }` (al menos uno; campos extra → 400).
 
-- `GET /readings/feed?limit=<l>&before_id=<id>` — Feed global público, paginado por cursor (sin `before_id` = primera página).
-- `GET /readings/feed/new-count?after_id=<id>` — `{ count }` de publicaciones públicas más nuevas que `after_id`.
-- `GET /readings/my-library?page=<p>&limit=<l>` — Biblioteca completa del usuario autenticado.
-- `POST /readings` — Body: `{ bookData: {...}, logData: {...} }` → `201 { logId }`. 409 si el libro ya está registrado.
-- `PUT /readings/:id` — **Update parcial**: solo se modifican los campos enviados (`status`, `rating`, `review_text`, `start_date`, `finish_date`, `is_log_public`, `current_page`).
-- `DELETE /readings/:id` — Elimina un registro propio.
-- `POST /readings/:id/like` — Alterna el like → `{ liked: bool, likes_count: int }`.
-- `POST /readings/:id/session` — Body: `{ duration_minutes, pages_read, current_page? }` (en transacción).
-- `GET /readings/:id/stats` — `{ total_minutes, total_sessions, avg_session_minutes, log_info }`.
-
-### Usuarios y Perfiles (`/users`)
-
-- `GET /users/:username` — `{ username, bio, avatar_url, is_profile_public, are_stats_public, is_own_profile, is_private_lock, library }` (`library` = primera página).
-- `GET /users/:username/library?page=<p>&limit=<l>` — Biblioteca paginada.
-- `GET /users/:username/stats` — `{ total_minutes, total_pages, finished_books, finished_books_this_year, target_books_this_year, avg_rating, total_likes, year, is_private }` o `{ is_private: true }`. `total_pages` = por cada lectura, `page_count` si está terminada (y se conoce), si no `current_page`.
-- `POST /users/goal` — Body: `{ target_books: 1..1000 }`.
-- `PUT /users/privacy` — Body: `{ is_profile_public?: bool, are_stats_public?: bool }` (al menos uno; campos extra → 400).
-
----
-
-## 6. Sistema de Diseño y Convenciones de UI
-
-> **Skills de diseño (`.claude/skills/`):** `lectorapp-design-system` (tokens accesibles, tipografía, componentes), `lectorapp-accessibility` (TalkBack, 48 dp, texto al 200 %, contraste), `lectorapp-ux-patterns` (voz, estados, borradores, privacidad) y `lectorapp-ui-review` (auditoría priorizada de una pantalla). Lo de esta sección describe el estado **actual**; las skills marcan hacia dónde migrar (p. ej. los pasteles no pasan contraste como texto o como fondo de botón con texto blanco).
-
-1. **Estética "Acogedora / Pastel" (Efecto Burbuja):**
-   - Bordes altamente redondeados en tarjetas, inputs y botones (`BorderRadius.circular(20)` a `24.0`).
-   - Sombras difusas y suaves coloreadas con el `primaryColor` activo a baja opacidad (`primaryColor.withValues(alpha: 0.08)`).
-   - Inputs sin bordes marcados (`BorderSide.none`), con relleno sutil.
-2. **Tipografía Dual:**
-   - **Títulos y encabezados literarios:** Fuente `Lora` (Serif, elegante, `FontWeight.bold` o `w800`).
-   - **Cuerpo de texto y controles:** Fuente `Nunito` (Sans-serif redondeada de lectura suave).
-   - **Cómo se aplica:** `ThemeService` carga `GoogleFonts.nunitoTextTheme()` y `GoogleFonts.lora(...)` (en `appBarTheme` y el getter `ThemeService.titleStyle`). **No usar `fontFamily: 'Lora'`**: no aplica la fuente (google_fonts la registra con otro nombre, p. ej. `Lora_700`). Usar siempre `GoogleFonts.lora(...)` o `ThemeService.titleStyle`.
-3. **Las 4 Paletas de Tema (`ThemeService`, construidas por `_buildTheme` a partir de `LectorColors`):**
-   - Cada tema tiene un **pastel (`accent`)** para fondos/chips/decoración y un **`ink`** legible para texto, íconos activos y botones. `primaryColor` y `colorScheme.primary` = ink.
-   - `light` (**Crema & Salvia** - Default): accent `#8BA89F`, ink `#4F7A70`, fondo `#FDFBF7`, texto `#3D4042`, secundario `#6B6F72`.
-   - `pink` (**Rosa Peonía**): accent `#D8A7B1`, ink `#B5536A`, fondo `#FEF9FA`.
-   - `blue` (**Brisa de Mar**): accent `#A1C4D0`, ink `#3F7186`, fondo `#F7FBFD`.
-   - `dark` (**Café de Medianoche**): accent/ink `#B59E86` (texto encima `#1C1917`), fondo `#1C1917`, cards `#292524`, texto `#E7E5E4`, secundario `#A8A29E`.
-   - Colores en código nuevo: `context.lector.xxx` (`lib/theme/lector_colors.dart`) o `Theme.of(context).colorScheme`. No usar `Colors.grey/red/...` ni hex sueltos.
-4. **Colores Semánticos de Estado de Lectura** (`context.lector.statusColor(status)`):
-   - `terminado`: `success` (`#2F7D3F` claro / `#81C784` oscuro).
-   - `leyendo`: `reading` (= ink del tema).
-   - `abandonado`: `danger` (`#B33B4E` claro / `#EF9A9A` oscuro); también errores, borrar y "me gusta" activo.
-   - Estrellas: `star` (`#BF8A00` claro / `#FFD54F` oscuro).
-5. **API de Opacidad en Flutter Moderno:**
-   - Se utiliza `.withValues(alpha: X)` en lugar del deprecado `.withOpacity(X)`. Mantener esta convención en todo código nuevo.
+**Salud:** `GET /health` → `{ status: 'OK', db: 'Connected' }` o 503.
 
 ---
 
-## 7. Comandos Útiles de Desarrollo
+## 7. Sistema de diseño y UI
+
+> **Skills (`.claude/skills/`)** — usarlas al tocar UI: `lectorapp-design-system` (tokens, tipografía,
+> componentes), `lectorapp-accessibility` (TalkBack, 48 dp, texto al 200 %, contraste),
+> `lectorapp-ux-patterns` (voz, estados, borradores, privacidad), `lectorapp-ui-review` (auditoría de una pantalla).
+
+1. **Estética acogedora/pastel:** radios grandes (`ThemeService.radiusCard = 20`, `radiusSmall = 12`), sombras suaves teñidas con el color del tema, inputs rellenos sin borde (el foco sí muestra borde `ink`).
+2. **Tipografía:** **Lora** para títulos (`ThemeService.titleStyle` o `GoogleFonts.lora(...)`), **Nunito** para el resto (`GoogleFonts.nunitoTextTheme()` en el tema). **Nunca `fontFamily: 'Lora'`**: no aplica (google_fonts registra la fuente con otro nombre).
+3. **Dos tonos por tema** (`LectorColors`, accesible con `context.lector`):
+   - `accent` = pastel: fondos tintados, chips, decoración. **Nunca como color de texto.**
+   - `ink` = tono legible (≥ 4.5:1): texto de marca, íconos activos, fondo de botones. `primaryColor` y `colorScheme.primary` **= ink**.
+   - Además: `onInk`, `textPrimary`, `textSecondary`, `iconInactive`, `outline`, `success`, `danger`, `reading`, `star`.
+
+   | Tema (`app_theme`) | accent | ink | fondo |
+   |---|---|---|---|
+   | `light` — Crema & Salvia (default) | `#8BA89F` | `#4F7A70` | `#FDFBF7` |
+   | `pink` — Rosa Peonía | `#D8A7B1` | `#B5536A` | `#FEF9FA` |
+   | `blue` — Brisa de Mar | `#A1C4D0` | `#3F7186` | `#F7FBFD` |
+   | `dark` — Café de Medianoche | `#B59E86` | `#B59E86` (texto encima `#1C1917`) | `#1C1917`, tarjetas `#292524` |
+
+   Claros: texto `#3D4042`, secundario `#6B6F72`. Oscuro: texto `#E7E5E4`, secundario `#A8A29E`.
+   `test/theme_contrast_test.dart` verifica los contrastes de `ThemeService.palettes`: **si cambias un color, corre los tests.**
+4. **Estados de lectura:** `context.lector.statusColor(status)` → `terminado` = `success`, `leyendo` = `reading` (= ink), `abandonado` = `danger`. Estrellas = `star`. Mostrar siempre con `StatusChip` (ícono + texto, no solo color).
+5. **Colores en código nuevo:** `context.lector.xxx` o `Theme.of(context).colorScheme`. Nada de `Colors.grey/red/...` ni hex sueltos. Opacidad con `.withValues(alpha: x)`, no `.withOpacity`.
+6. **Feedback:** `showSuccess(context, msg)` y `showError(context, error, fallback:, onRetry:)` de `lib/ui/feedback.dart`. `friendlyError` nunca muestra `toString()` de excepciones internas. Listas vacías y errores de carga: `EmptyState` / `ErrorState`.
+7. **Accesibilidad:** objetivos táctiles ≥ 48 dp, `tooltip` en todo `IconButton`, `Semantics` agrupando tarjetas en frases legibles, encabezados con `header: true`, letra mínima 12.
+8. **Voz:** español cercano, tuteo, sin mayúsculas sostenidas ("Guardado en tu biblioteca", "No pudimos cargar esto").
+
+---
+
+## 8. Backend (espejo `backend/`, solo lectura)
+
+Node.js + **Express 5** + **MySQL** (`mysql2`), CommonJS. Capas: `routes → validate (Zod) → controllers → services → models (SQL)`.
+
+```text
+backend/src/
+├── app.js                 # helmet, CORS, compression, json 100kb, pino-http, rate limit, rutas, 404 y error handler
+├── config/                # db.js (pool), env.js (falla al arrancar si falta config o JWT_SECRET < 32)
+├── api/routes|controllers|validators|middlewares   # auth, book, reading, user; protect + validate
+├── services/              # lógica de negocio
+├── models/                # SQL por entidad
+└── utils/                 # errors (AppError), tokens, mailer, openLibrary, ttlCache, logger (pino)
+backend/scripts/           # migrate.js (idempotente), setup_test_db.js, cleanup_tokens.js, add_indexes.js
+backend/tests/             # Jest + supertest (E2E contra la BD anti_social_test)
+backend/deploy/            # deploy.bat (plink) + remote-deploy.sh; ver backend/DEPLOY.md
+```
+
+- **Tablas:** `users`, `books` (`external_id` único), `reading_logs` (único `user_id + book_id`), `reading_likes`, `reading_sessions`, `reading_goals`, `token_blacklist`, `refresh_tokens` (hash SHA-256, `family_id`), `password_resets`.
+- **Seguridad:** JWT HS256 con `jti` único, blacklist por hash, refresh rotativo con detección de reuso, `users.password_changed_at` invalida sesiones anteriores, bcrypt, respuestas de login/forgot que no revelan qué cuentas existen.
+- **CORS:** `https://nacholoz3d.cl`, `https://www.nacholoz3d.cl`, `http://localhost:3000`, `http://localhost:4200` (por eso la vista previa web usa `--web-port=4200`).
+- La receta completa de autenticación (API + Flutter) está en `docs/guia-autenticacion.md`.
+
+---
+
+## 9. Comandos
 
 ```bash
-# Instalar dependencias / analizar / tests
 flutter pub get
 flutter analyze            # debe quedar "No issues found!"
-flutter test
+flutter test               # 47 tests
 
-# --- Ejecutar contra la API LOCAL (Lectorapp API con `npm run dev`) ---
-# Emulador Android:
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000/api
-# Teléfono físico (USB o depuración inalámbrica):
-adb reverse tcp:3000 tcp:3000
-flutter run -d <device-id> --dart-define=API_BASE_URL=http://localhost:3000/api
-# En VS Code: configuraciones "LectorApp (API local - teléfono / emulador / producción)"
-# en .vscode/launch.json (la de teléfono hace el adb reverse automáticamente).
+# --- Contra la API LOCAL (../Lectorapp API con `npm run dev`, puerto 3000) ---
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000/api                    # emulador Android
+adb reverse tcp:3000 tcp:3000                                                       # teléfono físico…
+flutter run -d <device-id> --dart-define=API_BASE_URL=http://localhost:3000/api    # …y luego esto
 
-# Vista previa de diseño en el navegador (sin teléfono). --web-port=4200 es obligatorio:
-# es el origen localhost que la API permite por CORS. El cronómetro en segundo plano no
-# funciona en web (TimerBackgroundService.isSupported = false); el resto de la UI sí.
-# En Chrome: DevTools (F12) → modo dispositivo para ver tamaño de teléfono. Hot reload: r.
+# Vista previa de diseño en Chrome. --web-port=4200 es obligatorio (origen permitido por CORS).
+# El cronómetro no funciona en web; el resto de la UI sí.
 flutter run -d chrome --web-port=4200 --dart-define=API_BASE_URL=http://localhost:3000/api
-# (configuraciones "LectorApp (Web - Chrome, ...)" en .vscode/launch.json)
 
-# Ejecutar contra PRODUCCIÓN (sin dart-define)
+# Contra PRODUCCIÓN (sin dart-define)
 flutter run
 
 # Release (R8 + ofuscación Dart). Guardar build/symbols de cada versión publicada:
-# sin ellos no se pueden leer los stack traces de errores de usuarios.
+# sin ellos no se pueden leer los stack traces.
 flutter build apk --release --obfuscate --split-debug-info=build/symbols
-flutter build appbundle --release --obfuscate --split-debug-info=build/symbols   # para Google Play
+flutter build appbundle --release --obfuscate --split-debug-info=build/symbols
 
-# Regenerar íconos o splash screen (si se modifican en pubspec.yaml)
-# Fuentes en assets/icon/ (TODAS con fondo transparente salvo icon_legacy.png). Si se regeneran
-# desde una imagen opaca se pierde el ícono temático (capa monochrome) y el splash muestra un cuadrado.
+# Íconos y splash (fuentes en assets/icon/, con fondo transparente)
 dart run flutter_launcher_icons
 dart run flutter_native_splash:create
 
-# Re-sincronizar el espejo backend/ desde el repo de la API (rama/commit actual)
+# Re-sincronizar el espejo backend/ desde el repo de la API (commit actual)
 git -C "../Lectorapp API" archive HEAD | tar -x -C backend
 ```
 
-### API (`../Lectorapp API`)
+En la máquina del autor, `.vscode/launch.json` (no versionado) tiene estas mismas configuraciones;
+la de teléfono ejecuta el `adb reverse` como tarea previa.
+
+**API (`../Lectorapp API`)**
 
 ```bash
-npm run dev          # servidor con nodemon (puerto 3000)
-npm test             # tests E2E (Jest + supertest) contra la BD anti_social_test
+npm run dev          # nodemon, puerto 3000
+npm test             # E2E (Jest + supertest) contra la BD anti_social_test
 npm run test:setup   # crea/actualiza el esquema de la BD de test
-npm run migrate      # migración idempotente (ejecutar en cada entorno tras desplegar)
+npm run migrate      # migración idempotente (en cada entorno tras desplegar)
 npm run cleanup      # borra tokens revocados expirados
 ```
 
 **Deploy a producción** (servidor Docker `ubuntu@155.181.180.178`, ver `../Lectorapp API/DEPLOY.md`):
-`git push origin main` en el repo de la API y luego ejecutar `deploy\deploy.bat` (usa PuTTY/`plink` + la llave `.ppk`).
-`deploy\deploy.bat <commit>` hace rollback. En el servidor, `~/[LECTORAPP]/api` es un clon git del repo de la API
-y los secretos están en `~/[LECTORAPP]/.env` (fuera de git). El front web viejo (`lectorFront`, Ionic) no se toca.
+`git push origin main` en el repo de la API y luego `deploy\deploy.bat` (PuTTY/`plink` + llave `.ppk`);
+`deploy\deploy.bat <commit>` hace rollback. En el servidor, `~/[LECTORAPP]/api` es un clon del repo y
+los secretos están en `~/[LECTORAPP]/.env` (fuera de git). **Deploys, cambios en el servidor y pushes:
+solo con confirmación explícita del usuario.**
 
 ---
 
-## 8. Reglas para Futuras Modificaciones
+## 10. Tests
 
-1. **Nunca hardcodear URLs ni tokens:** toda llamada HTTP nueva pasa por `ApiClient()` desde el servicio correspondiente en `lib/services/`. La URL base solo cambia vía `--dart-define`.
-2. **Respetar el tema activo:** evitar colores fijos de fondo o texto (`Colors.white`, `Colors.black`). El código actual aún tiene algunos usos fuera de `theme_service.dart` (varios intencionales sobre fondos con blur/imagen); no tomarlos como patrón. Usar `Theme.of(context).scaffoldBackgroundColor`, `cardColor`, `primaryColor` y comprobar `brightness == Brightness.dark` cuando se requiera contraste adaptativo.
-3. **Imágenes de red:** usar siempre `CachedNetworkImage` / `CachedNetworkImageProvider` (o `BookCover`) y sanitizar URLs de avatares con `/svg`.
-4. **Verificación de `mounted`:** antes de `setState()` o de usar `BuildContext` después de un `await`, comprobar `if (mounted)`. El linter (`use_build_context_synchronously`) lo vigila.
-5. **Futures sin esperar:** si una llamada async se lanza sin `await` a propósito (carga en segundo plano, navegación), envolverla en `unawaited(...)` (`dart:async`). El linter (`unawaited_futures`) marca el resto como posibles errores.
-6. **Leer JSON con `asBool` / `asInt`** (`lib/utils/json_utils.dart`), nunca con `== true` directo.
-7. **Validación duplicada a propósito:** si cambian las reglas de validación de la API (`src/api/validators/*`), actualizar también la validación local equivalente (ej. `register_screen.dart`).
-8. **No modificar `backend/` esperando cambios en la API:** los cambios reales van en `Lectorapp API`; luego re-sincronizar el espejo.
-9. **App y API se despliegan juntas** cuando cambia el contrato (ej. el feed por cursor no funciona contra una API antigua).
+| Archivo | Qué cubre |
+|---|---|
+| `test/api_client_refresh_test.dart` | Renovación antes de pedir, reintento tras 401, renovación única compartida, refresh rechazado cierra sesión, 503 no la cierra, margen de 30 s. |
+| `test/models_and_utils_test.dart` | `asBool`, `UserProfile.fromJson`, `ReadingLog.fromJson`, `AuthService.isJwtValid`, `ApiClient.extractErrorMessage`. |
+| `test/reading_log_form_test.dart` | `ReadingLogDraft` (igualdad, JSON, store) y `StarRatingInput` (toque, semántica, tamaño táctil). |
+| `test/theme_contrast_test.dart` | Contraste WCAG de las 4 paletas. |
+| `test/display_mode_service_test.dart` | `DisplayModeService.pickBestMode`. |
+
+No hay tests de pantallas completas ni de integración en la app. Para testear servicios, inyectar un
+`MockClient` en `ApiClient` y usar `SharedPreferences.setMockInitialValues`.
 
 ---
 
-## 8b. Flujo de trabajo con agentes (backlog)
+## 11. Reglas para modificar el código
+
+1. **HTTP solo por `ApiClient()`**, desde un servicio de `lib/services/`. Nunca URLs ni tokens escritos a mano; la URL base solo cambia con `--dart-define` (no editar `config.dart`).
+2. **`mounted` después de cada `await`** antes de `setState()` o de usar `BuildContext`.
+3. **Futures sin esperar a propósito → `unawaited(...)`** (`dart:async`).
+4. **JSON con `asBool` / `asInt`**, nunca `== true` ni casts directos.
+5. **Respetar el tema:** colores desde `context.lector` / `colorScheme`; títulos con `ThemeService.titleStyle`.
+6. **Imágenes de red:** `CachedNetworkImage` / `CachedNetworkImageProvider` / `BookCover`, con avatares `/svg` → `/png`.
+7. **Mensajes al usuario** con `showSuccess` / `showError`; estados vacíos y de error con `EmptyState` / `ErrorState`.
+8. **Un solo formulario de lectura:** cualquier campo nuevo va en `ReadingLogSheet` **y** en `ReadingLogDraft` (igualdad, `toJson`/`fromJson`) para que el borrador y el aviso de descarte sigan funcionando.
+9. **Si cambia la biblioteca del usuario**, el método del servicio debe llamar a `_notifyLibraryChanged()`.
+10. **Validación duplicada a propósito:** si cambian las reglas de la API (`src/api/validators/*`), actualizar la validación local equivalente (`register_screen.dart`, `forgot_password_screen.dart`, `reading_log_sheet.dart`).
+11. **No modificar `backend/`**: los cambios van en `../Lectorapp API`; luego re-sincronizar el espejo.
+12. **App y API se despliegan juntas** cuando cambia el contrato.
+13. **Dentro de `onStart` (isolate del cronómetro)** no usar servicios ni estado de la app: solo mensajes.
+14. **Antes de dar algo por terminado:** `flutter analyze` sin issues y `flutter test` en verde. Actualizar este archivo, `CHANGELOG.md` y `PENDIENTES.md` si cambia la arquitectura, el contrato o la lista de pendientes.
+
+### Deuda conocida (no copiar como patrón)
+
+- `ReadingLog.fromJson` y `Book.fromJson` comparan booleanos con `== true || == 1` en vez de `asBool`.
+- `PublicProfileScreen` muestra `e.toString()` como error y compara `is_private == true`.
+- Colores fijos en los íconos de estadísticas (`#4995FF`, `#66BB6A`, `#AB47BC`, `#FFB74D`) en `profile_screen.dart`, `public_profile_screen.dart` y `book_stats_modal.dart`; `Colors.black/white` con alpha en sombras y en `book_detail_screen.dart` (estos últimos, sobre blur, son intencionales).
+- `ReadingTimerModal` y `BookStatsModal` aún no siguen las skills de diseño (textos en mayúsculas, bordes propios).
+- La clave `cached_global_feed` está declarada dos veces (`ApiClient.feedCacheKey` y `ReadingService._feedCacheKey`).
+- `_buildStatsContent` / `_buildMetricCard` están duplicados entre `ProfileScreen` y `PublicProfileScreen`.
+- `Book` (modelo) y `AuthService.isTokenValid()` no se usan.
+
+---
+
+## 12. Flujo de trabajo con agentes
 
 Las tareas de `BACKLOG.md` se implementan con dos subagentes definidos en `.claude/agents/`, coordinados
 por la sesión principal (**orquestador**). Un subagente no puede invocar a otro: toda entrega pasa por el orquestador.
 
 1. **Orquestador → `desarrollador`** (modelo heredado): un encargo por tarea con ID, historia, criterios de
-   aceptación, decisiones relevantes (D1–D7), repos/archivos implicados y restricciones. Nada de producción.
+   aceptación, decisiones relevantes, repos/archivos implicados y restricciones. Nada de producción.
 2. **`desarrollador`** implementa, corre analyze/tests y responde con su **informe de entrega**. No hace commits.
 3. **Orquestador → `revisor`** (modelo **opus**, solo lectura + Bash): pasarle **solo** esa tarea — criterios,
    lista de archivos tocados / diff, cómo probar y número de ronda —, no el backlog entero ni el historial.
@@ -365,6 +538,17 @@ por la sesión principal (**orquestador**). Un subagente no puede invocar a otro
 6. Con `APROBADO`: el orquestador hace el commit (mensaje con el ID de la tarea), marca `[x]` en `BACKLOG.md` y sigue.
 7. Deploys, cambios en el servidor y pushes: solo el orquestador y con confirmación del usuario.
 
-## 9. Pendientes Conocidos
+Commits: estilo *conventional* en inglés (`feat(ui): …`, `fix(app): …`, `docs: …`, `build(android): …`).
 
-El trabajo planificado de la 1.1.0 está en [`BACKLOG.md`](BACKLOG.md). La lista de tareas no bloqueantes está en [`PENDIENTES.md`](PENDIENTES.md): tareas de antes de publicar (rotar clave de ZeptoMail, firma de release, bundle ID de iOS), de código (refresh tokens, modelos tipados en el feed, FULLTEXT en la búsqueda, dependencias) y de diseño. Actualizarla al cerrar o descubrir tareas.
+---
+
+## 13. Dónde está cada cosa
+
+| Documento | Contenido |
+|---|---|
+| [`README.md`](README.md) | Puesta en marcha para desarrolladores. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Qué incluye cada versión publicada. |
+| [`PENDIENTES.md`](PENDIENTES.md) | Tareas no bloqueantes: firma de release, bundle ID de iOS, rotar clave SMTP, deuda de código y de diseño. Actualizarla al cerrar o descubrir tareas. |
+| [`BACKLOG.md`](BACKLOG.md) | Trabajo planificado posterior a 1.0.0. |
+| [`docs/guia-autenticacion.md`](docs/guia-autenticacion.md) | Sistema de sesión explicado paso a paso (API + Flutter). |
+| `backend/DEPLOY.md` | Infraestructura y despliegue de la API. |
