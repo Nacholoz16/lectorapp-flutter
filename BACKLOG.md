@@ -1,7 +1,7 @@
 # Backlog — LectorApp 1.1.0 · "Lista para Google Play"
 
 Objetivo de la versión: cumplir las políticas de Google Play (cuentas, contenido generado por usuarios,
-privacidad) y dar herramientas de moderación, con una web propia en **https://lectorapp.nacholoz3d.cl**.
+privacidad) y dar herramientas de moderación, con una web propia en **https://lector.nacholoz3d.cl**.
 
 Creado: 2026-11-09 · Decisiones confirmadas: 2026-11-09. Estimaciones: **S** ≈ medio día · **M** ≈ 1–2 días · **L** ≈ 3+ días.
 Estado: `[ ]` por hacer · `[~]` en curso · `[x]` hecho.
@@ -237,7 +237,7 @@ Como usuario suspendido, quiero pedir que se revise mi caso.
 
 ---
 
-## Épica 5 — Web lectorapp.nacholoz3d.cl · *Prioridad 1 (base) / 2 (panel)*
+## Épica 5 — Web lector.nacholoz3d.cl · *Prioridad 1 (base) / 2 (panel)*
 
 ### 5.1 Reemplazar el front viejo por la web nueva · M · *parte local hecha; servidor pendiente*
 - [ ] Respaldar el servicio `frontend` actual (`lectorFront`, Ionic/Angular) y su configuración en
@@ -245,8 +245,8 @@ Como usuario suspendido, quiero pedir que se revise mi caso.
 - [x] Nuevo repo `lectorapp-web` (D1), con el diseño de la app (tokens de color, Lora + Nunito,
   modo claro/oscuro). Contenedor **Nginx** que sirve los estáticos; cabeceras de seguridad
   (HSTS, CSP, `X-Content-Type-Options`, `Referrer-Policy`).
-- [ ] Nginx Proxy Manager: `lectorapp.nacholoz3d.cl` → nuevo contenedor, con certificado TLS.
-- [x] API: agregar `https://lectorapp.nacholoz3d.cl` a CORS.
+- [ ] Nginx Proxy Manager: `lector.nacholoz3d.cl` → nuevo contenedor, con certificado TLS.
+- [x] API: agregar `https://lector.nacholoz3d.cl` a CORS.
 - [x] Deploy como **stack de Portainer propio** (`lectorapp-web`, desde el repo Git), separado del
   proyecto de la API y la BD, en la red `red-global-proxy` (2026-11-22; reemplaza al `deploy.bat`).
 - [ ] Crear el stack en Portainer (ver `DEPLOY.md` de la web, paso 2).
@@ -310,7 +310,7 @@ Como administrador, quiero moderar desde el navegador.
 
 | Sprint | Contenido | Resultado |
 |---|---|---|
-| **1** | D1–D6 · 1.1 · 1.2 · 4.1 · 5.1 · 5.2 | Web nueva en `lectorapp.nacholoz3d.cl` con términos y privacidad publicados |
+| **1** | D1–D6 · 1.1 · 1.2 · 4.1 · 5.1 · 5.2 | Web nueva en `lector.nacholoz3d.cl` con términos y privacidad publicados |
 | **2** | 1.3 · 2.1 · 2.2 · 2.3 | Aceptación de términos, desactivar/reactivar y eliminar la cuenta (app + web) |
 | **3** | 3.1 · 3.2 · 4.2 · 4.3 · 4.4 | Denunciar, bloquear, reseñas privadas, suspensión (manual y automática), exportar y apelar |
 | **4** | 5.3 | Panel de administración completo |
