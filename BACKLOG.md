@@ -247,7 +247,9 @@ Como usuario suspendido, quiero pedir que se revise mi caso.
   (HSTS, CSP, `X-Content-Type-Options`, `Referrer-Policy`).
 - [ ] Nginx Proxy Manager: `lectorapp.nacholoz3d.cl` → nuevo contenedor, con certificado TLS.
 - [x] API: agregar `https://lectorapp.nacholoz3d.cl` a CORS.
-- [x] Deploy con un `deploy.bat` como el de la API (git pull + build + recrear solo ese contenedor).
+- [x] Deploy como **stack de Portainer propio** (`lectorapp-web`, desde el repo Git), separado del
+  proyecto de la API y la BD, en la red `red-global-proxy` (2026-11-22; reemplaza al `deploy.bat`).
+- [ ] Crear el stack en Portainer (ver `DEPLOY.md` de la web, paso 2).
 - **Aceptación:** la web carga por HTTPS con nota A en las cabeceras de seguridad; la API y la BD no se reinician.
 
 ### 5.2 Páginas públicas · S
