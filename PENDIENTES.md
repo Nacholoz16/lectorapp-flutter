@@ -29,11 +29,17 @@ El trabajo planificado de la versión 1.1.0 (Google Play, moderación, web, cifr
   `/terminos` y `/privacidad` que hoy remiten al correo (lista en el informe de la tarea 1.1/1.2).
   Hecho para 2.1 (desactivar: `/terminos#desactivar` y la sección de derechos de `/privacidad`) y 2.2
   (eliminar desde la app: `/terminos` §8, `/privacidad` derechos/conservación y `/contacto`; el correo
-  queda como alternativa). Al terminar 2.3, enlazar `/eliminar-cuenta` en esos mismos textos.
+  queda como alternativa) y 2.3 (`/eliminar-cuenta` enlazada en `/terminos` (suspensión y §8), `/privacidad`
+  §3 —ahora menciona su único formulario—, encargados, conservación, derechos y seguridad, `/contacto`
+  y el pie; versión 2026-11 sin cambio).
 - [ ] **Eliminar cuenta, detalles (revisión 2.2):** (a) `admin_actions.note` se conserva al anonimizar;
   en la Épica 4 vaciarla o exigir que no identifique a la persona, para que la Privacidad siga siendo
   cierta. (b) Si se pierde la respuesta 200 del `DELETE /account`, la app muestra error y no limpia
   los borradores locales; separar la llamada HTTP de la limpieza local.
+- [ ] **Códigos por correo (revisión 2.3):** un tercero puede bloquear 24 h (renovables) la recuperación
+  y el borrado web de otra persona pidiendo 5 códigos al día (compromiso del tope por cuenta; desbloqueo
+  manual en DEPLOY.md de la API). Si hay abuso, contar solo códigos con intentos fallidos. Además,
+  `mailer.js` escribe el email en el log de error si falta SMTP.
 - [ ] **Bundle ID de iOS.** Sigue siendo `com.example.helloWorld` (plantilla). Cambiarlo a
   `com.nacholoz3d.lectorapp` (como Android) en `ios/Runner.xcodeproj` antes de compilar para iPhone.
 

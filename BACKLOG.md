@@ -57,7 +57,7 @@ CREATE TABLE user_notices (id, user_id, type ENUM('reading_locked','suspended','
 
 CREATE TABLE admin_actions (id, admin_id, action, target_type, target_id, note, created_at); -- auditoría
 
-CREATE TABLE deletion_requests (id, email_hash, code_hash, expires_at, attempts, used_at, created_at); -- web
+CREATE TABLE deletion_requests (id, user_id, code_hash, expires_at, attempts, used_at, created_at); -- web (user_id: se borra con la cuenta)
 ```
 
 Todo con **migración idempotente** (`npm run migrate`) y en el setup de la BD de tests.
@@ -156,9 +156,9 @@ Como usuario, quiero borrar mi cuenta y mis datos para siempre.
 - [x] Test E2E: tras borrar, ningún rastro del usuario en ninguna tabla.
 - **Aceptación:** borrado real (no desactivación), irreversible y avisado.
 
-### 2.3 Solicitar eliminación desde la web · M · *depende de Épica 5*
+### 2.3 Solicitar eliminación desde la web · M · *hecha; API y web pendientes de desplegar (primero la API)*
 Google exige un enlace web para pedir el borrado.
-- [ ] Web `/eliminar-cuenta`: email → código de 6 dígitos por correo → confirmar → mismo borrado que 2.2.
+- [x] Web `/eliminar-cuenta`: email → código de 6 dígitos por correo → confirmar → mismo borrado que 2.2.
   Misma protección que la recuperación (respuesta idéntica, HMAC, 15 min, 5 intentos, rate limit).
 - **Aceptación:** la URL se puede registrar en Play Console; funciona sin la app instalada.
 

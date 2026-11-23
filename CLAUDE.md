@@ -330,7 +330,7 @@ No hay base de datos local. Los borradores y preferencias **no** se borran al ce
 > cuenta), posteriores a la 1.0.0.
 
 Base: `Config.baseUrl` (`https://api.nacholoz3d.cl/api`). Todo requiere `Authorization: Bearer <JWT>`
-**salvo** `/auth/*`, `/books/feed` y `/health`. Body JSON máx. 100 kb.
+**salvo** `/auth/*`, `/books/feed`, `/account/deletion-request`, `/account/deletion-confirm` y `/health`. Body JSON máx. 100 kb.
 
 ### Errores
 
@@ -354,6 +354,8 @@ Siempre `{ "error": string, "code": string }`:
 
 General 300 / 15 min. Login: 10 intentos **fallidos** / 5 min. Registro: 10 / hora. Forgot: 5 / hora.
 Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min. Desactivar: 5 contraseñas **incorrectas** / 15 min (por cuenta).
+Eliminar desde la web: pedir código 5 / hora, confirmar 10 / 15 min.
+**Por cuenta, en 24 h** (códigos por correo: recuperación y eliminación, cada uno por separado): máx. 5 códigos emitidos y 10 intentos fallidos en total; al llegar no se envían más códigos ni se acepta ninguno, con las mismas respuestas públicas (200 / 400 genérico).
 
 ### Validación relevante para la UI
 
@@ -371,7 +373,7 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min. Desactivar: 5 con
 - `POST /refresh` — `{ refresh_token }` → `{ token, refresh_token }`. **Rota**: el usado queda revocado; reusar uno ya rotado revoca toda la familia → 401.
 - `POST /logout` — header `Authorization` (acceso vigente → blacklist por hash) y/o `{ refresh_token }` (revoca su familia). Al menos uno válido, si no 401.
 - `POST /forgot-password` — `{ email }` → siempre `200 { message }` (no revela si la cuenta existe). Código de 6 dígitos, vence en 15 min, 1 por minuto por cuenta.
-- `POST /reset-password` — `{ email, code, password }` → `{ token, refresh_token, user }`. Máx. 5 intentos por código; cierra todas las sesiones anteriores. Código inválido/vencido → 400.
+- `POST /reset-password` — `{ email, code, password }` → `{ token, refresh_token, user }`. Máx. 5 intentos por código y 10 fallidos por cuenta en 24 h; cierra todas las sesiones anteriores. Código inválido/vencido → 400.
 
 **Cuenta (`/account`)**
 - `POST /terms` — sin body; acepta la versión vigente (`CURRENT_TERMS_VERSION` de la API, hoy `2026-11`) → `{ terms_version, current_terms_version, needs_terms: false, terms_accepted_at }`. Idempotente (conserva la fecha de la primera aceptación).
@@ -379,6 +381,8 @@ Reset: 10 / 15 min. Refresh: 60 / 15 min. Búsqueda: 30 / min. Desactivar: 5 con
 - `POST /deactivate` — `{ password }` → `{ status: 'deactivated', hidden_readings }`. En una transacción guarda la visibilidad de **cada** lectura (`public_before_deactivation`) y las deja todas privadas. Contraseña incorrecta → `401 INVALID_PASSWORD` (nada cambia). Ya desactivada → `409` (no pisa la visibilidad guardada).
 - `POST /reactivate` — sin body ni contraseña → `{ status: 'active', restored_readings }`. Cada lectura vuelve a su visibilidad anterior salvo las que tengan `moderation_locked_at` (siguen privadas). No exige los términos vigentes (restaura, no publica). Ya activa → `409`.
 - `DELETE /` — `{ password }` → `200 { deleted: true }` (200 con cuerpo, no 204: el cliente confirma el borrado). Borra en **una transacción** la cuenta y todo lo suyo: lecturas (con reseñas), "me gusta" dados **y** recibidos, sesiones del cronómetro, metas, refresh tokens y códigos de recuperación; en `admin_actions` las filas se conservan con `admin_id`/`target_id` en `NULL` si apuntaban a la cuenta o a sus lecturas. Los libros no se borran. Funciona con la cuenta activa, desactivada o suspendida. Revoca el token de acceso usado (blacklist); los de otros dispositivos dejan de valer porque el usuario ya no existe (401). Contraseña incorrecta → `401 INVALID_PASSWORD` (nada cambia; comparte con `/deactivate` el límite de 5 fallos por cuenta / 15 min). Dos borrados simultáneos → uno `200`, el otro `401`. Username y email quedan libres. La lógica es `deleteUserCompletely(userId, conn)` (`src/services/accountDeletion.service.js`), reutilizable por la web (2.3); **toda tabla nueva con datos de un usuario se registra ahí**.
+- `POST /deletion-request` — **sin sesión** (tarea 2.3, la usa la web `https://lector.nacholoz3d.cl/eliminar-cuenta`; Google Play exige un enlace web) — `{ email }` (normalizado como en el registro) → **siempre** `200 { message }` idéntico, exista o no la cuenta y esté activa, desactivada o suspendida. Si existe, envía un código de 6 dígitos (HMAC en `deletion_requests`, 15 min, 1 por minuto por cuenta, pedir otro invalida el anterior); el correo sale en segundo plano. Sin enlaces en el correo, solo el código.
+- `POST /deletion-confirm` — **sin sesión** — `{ email, code }` → `200 { deleted: true }` con el mismo borrado que `DELETE /account` (en una transacción, también para cuentas suspendidas), o `400 VALIDATION_ERROR` genérico ("El código no es válido o ya venció. Pide uno nuevo.") para cuenta inexistente, código incorrecto, vencido, ya usado o tras 5 intentos fallidos. Los códigos de recuperación de contraseña no sirven aquí ni al revés. La app no usa estos endpoints.
 - **Con la cuenta desactivada** solo responden: `GET /readings/my-library`, `GET /readings/:id/stats` (solo de **sus** lecturas), `GET /account/status`, `POST /account/reactivate`, `POST /account/deactivate` (→ 409), `DELETE /account` y `/auth/*`. Todo lo demás → `403 ACCOUNT_DEACTIVATED`. Para los demás usuarios su perfil, biblioteca y stats responden `404` (igual que un usuario inexistente), no aparece en el feed ni en `/books/feed`, y sus "me gusta" dejan de contar en `likes_count` y `total_likes` (no se borran; vuelven al reactivar).
 
 **Libros (`/books`)**

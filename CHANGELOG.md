@@ -14,6 +14,8 @@
 - **Eliminar tu cuenta** (Perfil → ⚙ → Cuenta, también desde el modo desactivado): con contraseña y
   confirmación borra la cuenta y todos sus datos, y limpia del teléfono la sesión, el feed guardado
   y los borradores.
+- **Eliminar tu cuenta desde la web**, sin la app: https://lector.nacholoz3d.cl/eliminar-cuenta
+  (email → código de 6 dígitos → confirmar).
 
 ### API
 - `accept_terms: true` obligatorio en el registro; `POST /account/terms`; publicar sin la versión
@@ -24,11 +26,14 @@
   cerrado por defecto para cuentas no activas (migración paso 10).
 - `DELETE /account` (con contraseña): borrado transaccional reutilizable (`deleteUserCompletely`),
   sin migración; la auditoría `admin_actions` se conserva anonimizada.
+- `POST /account/deletion-request` y `/deletion-confirm` (públicos, migración paso 11 `deletion_requests`).
+- **Seguridad:** tope por cuenta en los códigos por correo (recuperación y borrado): máx. 5 códigos y
+  10 intentos fallidos en 24 h; el reset ya no revela por tiempos si un email tiene cuenta.
 - Rol de administrador y tabla de auditoría `admin_actions` (base para la moderación).
 - CORS para la web nueva `https://lector.nacholoz3d.cl`.
 
 ### Técnico
-- Nueva dependencia `url_launcher`. 105 tests en la app, 131 en la API.
+- Nueva dependencia `url_launcher`. 105 tests en la app, 153 en la API.
 
 ## 1.0.0 — 2026-11-08
 
