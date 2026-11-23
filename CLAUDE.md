@@ -64,7 +64,7 @@ Qué puede hacer el usuario hoy:
   `prefer_const_constructors`, `prefer_const_declarations`, `always_declare_return_types`,
   `avoid_catching_errors`, `unnecessary_null_checks`, `unrelated_type_equality_checks`).
   **`flutter analyze` debe quedar en "No issues found!".**
-- **Android:** Kotlin Gradle Plugin `2.2.20`, AGP `8.7.0`, Gradle `8.10.2`, Java 11 con *core library desugaring*.
+- **Android:** Kotlin Gradle Plugin `2.2.20`, AGP `8.9.1`, Gradle `8.11.1`, Java 11 con *core library desugaring*.
 
 | Librería | Versión | Uso |
 |:--|:--|:--|
