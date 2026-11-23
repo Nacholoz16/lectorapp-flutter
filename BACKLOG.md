@@ -1,4 +1,7 @@
-# Backlog — LectorApp 1.1.0 · "Lista para Google Play"
+# Backlog — LectorApp 1.2.0 · "Lista para Google Play"
+
+> Los Sprints 1 y 2 (épicas 1 y 2, 4.1 y 5.1) salieron en la **1.1.0** (2026-11-22). Lo que queda
+> (Sprints 3–6) apunta a la **1.2.0**.
 
 Objetivo de la versión: cumplir las políticas de Google Play (cuentas, contenido generado por usuarios,
 privacidad) y dar herramientas de moderación, con una web propia en **https://lector.nacholoz3d.cl**.
@@ -317,5 +320,5 @@ Como administrador, quiero moderar desde el navegador.
 | **5** | 6.1 · 6.2 · 6.3 | Datos protegidos |
 | **6** | Épica 7 | App enviada a prueba cerrada en Google Play |
 
-Al cerrar 1.1.0: actualizar `CHANGELOG.md`, `CLAUDE.md` (contrato de la API, nuevas pantallas),
-la skill `auth-sesiones-seguras` si cambian los flujos de cuenta, y etiquetar `v1.1.0` en los repos.
+Al cerrar 1.2.0: actualizar `CHANGELOG.md`, `CLAUDE.md` (contrato de la API, nuevas pantallas),
+la skill `auth-sesiones-seguras` si cambian los flujos de cuenta, y etiquetar `v1.2.0` en los repos.

@@ -25,6 +25,8 @@ app.use(cors({
     origin: [
         'https://nacholoz3d.cl',
         'https://www.nacholoz3d.cl',
+        // Web nueva (repo lectorapp-web): páginas públicas y, más adelante, el panel /admin.
+        'https://lector.nacholoz3d.cl',
         'http://localhost:3000',
         'http://localhost:4200',
     ],
@@ -66,6 +68,9 @@ app.use('/api/auth', require('./api/routes/auth.routes'));
 app.use('/api/books', require('./api/routes/book.routes'));
 app.use('/api/readings', require('./api/routes/reading.routes'));
 app.use('/api/users', require('./api/routes/user.routes'));
+app.use('/api/account', require('./api/routes/account.routes'));
+// Administración: protect → rate limit propio → requireAdmin para todo /api/admin/*.
+app.use('/api/admin', require('./api/routes/admin.routes'));
 
 app.get('/api/health', async (req, res) => {
     try {

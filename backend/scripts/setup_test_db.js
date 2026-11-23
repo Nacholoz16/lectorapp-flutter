@@ -24,6 +24,29 @@ async function setupTestDb() {
 
   try { await db.query('ALTER TABLE users ADD COLUMN are_stats_public TINYINT(1) NOT NULL DEFAULT 1'); } catch (_) {}
   try { await db.query('ALTER TABLE users ADD COLUMN password_changed_at BIGINT UNSIGNED NULL'); } catch (_) {}
+  try { await db.query("ALTER TABLE users ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user'"); } catch (_) {}
+  // Aceptación de términos (mismo esquema que scripts/migrate.js, paso 9).
+  try { await db.query('ALTER TABLE users ADD COLUMN terms_version VARCHAR(20) NULL'); } catch (_) {}
+  try { await db.query('ALTER TABLE users ADD COLUMN terms_accepted_at DATETIME NULL'); } catch (_) {}
+  // Estado de la cuenta (mismo esquema que scripts/migrate.js, paso 10).
+  try { await db.query("ALTER TABLE users ADD COLUMN status ENUM('active','deactivated','suspended') NOT NULL DEFAULT 'active'"); } catch (_) {}
+  try { await db.query('ALTER TABLE users ADD COLUMN status_changed_at DATETIME NULL'); } catch (_) {}
+
+  // Auditoría de administración (mismo esquema que scripts/migrate.js, paso 8).
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS admin_actions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      admin_id INT NULL,
+      action VARCHAR(50) NOT NULL,
+      target_type VARCHAR(30) NOT NULL,
+      target_id INT NULL,
+      note VARCHAR(500) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_admin_actions_created (created_at),
+      INDEX idx_admin_actions_target (target_type, target_id),
+      CONSTRAINT fk_admin_actions_admin FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS password_resets (
@@ -36,6 +59,21 @@ async function setupTestDb() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_resets_user (user_id, used_at),
       CONSTRAINT fk_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Eliminar la cuenta desde la web (mismo esquema que scripts/migrate.js, paso 11).
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS deletion_requests (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      code_hash CHAR(64) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      used_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_deletion_user (user_id, used_at),
+      CONSTRAINT fk_deletion_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
@@ -102,6 +140,9 @@ async function setupTestDb() {
   try { await db.query('ALTER TABLE reading_logs ADD COLUMN current_page INT DEFAULT 0'); } catch (_) {}
   try { await db.query('ALTER TABLE reading_logs ADD UNIQUE KEY uniq_user_book (user_id, book_id)'); } catch (_) {}
   try { await db.query('CREATE INDEX idx_logs_public_id ON reading_logs (is_log_public, id)'); } catch (_) {}
+  // Visibilidad a restaurar y bloqueo por moderación (scripts/migrate.js, paso 10).
+  try { await db.query('ALTER TABLE reading_logs ADD COLUMN public_before_deactivation TINYINT(1) NULL'); } catch (_) {}
+  try { await db.query('ALTER TABLE reading_logs ADD COLUMN moderation_locked_at DATETIME NULL'); } catch (_) {}
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS reading_likes (

@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.1.0 — en desarrollo
+## 1.1.0 — 2026-11-22
+
+Cuenta y privacidad (app `1.1.0+2`, API `1.1.0`, web `1.0.0` en https://lector.nacholoz3d.cl).
 
 ### Cuenta y comunidad
 - Registro con aceptación obligatoria de los **Términos** y la **Política de privacidad**

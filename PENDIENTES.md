@@ -1,7 +1,7 @@
 # Pendientes de LectorApp
 
 Tareas conocidas que **no bloquean el desarrollo** y se retoman más adelante.
-El trabajo planificado de la versión 1.1.0 (Google Play, moderación, web, cifrado) está en [`BACKLOG.md`](BACKLOG.md).
+El trabajo planificado de la versión 1.2.0 (Google Play, moderación, web, cifrado) está en [`BACKLOG.md`](BACKLOG.md).
 Última revisión: 2026-11-22.
 
 ## Antes de publicar (no urgentes mientras estemos en desarrollo)

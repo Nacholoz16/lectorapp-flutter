@@ -13,6 +13,18 @@
  * 6. Recuperación de contraseña: tabla password_resets y users.password_changed_at
  *    (segundos Unix; los JWT emitidos antes de ese momento dejan de valer).
  * 7. Refresh tokens (sesiones largas rotativas): tabla refresh_tokens.
+ * 8. Administración (tarea 4.1): users.role ('user' | 'admin'; se asigna solo por SQL o con
+ *    scripts/grant_admin.js) y tabla admin_actions (auditoría de cada acción de admin).
+ * 9. Aceptación de términos (tarea 1.3): users.terms_version y users.terms_accepted_at.
+ *    Quedan en NULL para las cuentas existentes (deberán aceptar antes de publicar); sus
+ *    lecturas públicas actuales NO se modifican.
+ * 10. Desactivar / reactivar la cuenta (tarea 2.1, D7): users.status ('active' | 'deactivated' |
+ *    'suspended'; todas las cuentas existentes quedan 'active'), users.status_changed_at,
+ *    reading_logs.public_before_deactivation (visibilidad a restaurar al reactivar) y
+ *    reading_logs.moderation_locked_at (privada permanente por moderación, D4; la usará la 3.1,
+ *    pero la reactivación ya la respeta).
+ * 11. Eliminar la cuenta desde la web (tarea 2.3): tabla deletion_requests (códigos de 6 dígitos
+ *    guardados como HMAC, por user_id; se borran junto con la cuenta).
  */
 require('dotenv').config({ quiet: true });
 const db = require('../src/config/db');
@@ -128,6 +140,77 @@ async function migrate() {
       CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`);
     console.log('[7] Tabla refresh_tokens lista');
+
+    // 8. Rol de administrador y auditoría
+    if (await columnExists('users', 'role')) {
+        console.log('[8] users.role ya existe');
+    } else {
+        await db.query("ALTER TABLE users ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user'");
+        console.log('[8] users.role creada');
+    }
+    // admin_id con SET NULL (no CASCADE): si se borra la cuenta del admin, el historial se conserva.
+    // target_id no tiene FK porque apunta a distintas tablas según target_type.
+    await db.query(`CREATE TABLE IF NOT EXISTS admin_actions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      admin_id INT NULL,
+      action VARCHAR(50) NOT NULL,
+      target_type VARCHAR(30) NOT NULL,
+      target_id INT NULL,
+      note VARCHAR(500) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_admin_actions_created (created_at),
+      INDEX idx_admin_actions_target (target_type, target_id),
+      CONSTRAINT fk_admin_actions_admin FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+    )`);
+    console.log('[8] Tabla admin_actions lista');
+
+    // 9. Aceptación de términos
+    if (await columnExists('users', 'terms_version')) {
+        console.log('[9] users.terms_version ya existe');
+    } else {
+        await db.query('ALTER TABLE users ADD COLUMN terms_version VARCHAR(20) NULL');
+        console.log('[9] users.terms_version creada');
+    }
+    if (await columnExists('users', 'terms_accepted_at')) {
+        console.log('[9] users.terms_accepted_at ya existe');
+    } else {
+        await db.query('ALTER TABLE users ADD COLUMN terms_accepted_at DATETIME NULL');
+        console.log('[9] users.terms_accepted_at creada');
+    }
+
+    // 10. Estado de la cuenta y visibilidad a restaurar.
+    // status_changed_at es DATETIME (como terms_accepted_at): es un dato para personas y para el
+    // panel de administración, no se compara con el `iat` del JWT como password_changed_at.
+    // Sin índice en users.status: siempre se filtra junto a un JOIN por id (PK).
+    const step10Columns = [
+        ['users', 'status', "ENUM('active','deactivated','suspended') NOT NULL DEFAULT 'active'"],
+        ['users', 'status_changed_at', 'DATETIME NULL'],
+        ['reading_logs', 'public_before_deactivation', 'TINYINT(1) NULL'],
+        ['reading_logs', 'moderation_locked_at', 'DATETIME NULL'],
+    ];
+    for (const [table, column, definition] of step10Columns) {
+        if (await columnExists(table, column)) {
+            console.log(`[10] ${table}.${column} ya existe`);
+        } else {
+            await db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+            console.log(`[10] ${table}.${column} creada`);
+        }
+    }
+
+    // 11. Solicitudes de eliminación desde la web. Mismo esquema que password_resets: por user_id
+    // (no por hash del email) para que el borrado de la cuenta se lleve también estas filas.
+    await db.query(`CREATE TABLE IF NOT EXISTS deletion_requests (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      code_hash CHAR(64) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      used_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_deletion_user (user_id, used_at),
+      CONSTRAINT fk_deletion_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`);
+    console.log('[11] Tabla deletion_requests lista');
 }
 
 migrate()

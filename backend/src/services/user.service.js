@@ -2,13 +2,19 @@ const UserModel = require('../models/user.model');
 const ReadingModel = require('../models/reading.model');
 const { normalizeLog } = require('./reading.service');
 const { NotFoundError } = require('../utils/errors');
+const { termsStatus } = require('../config/terms');
 
 const DEFAULT_PAGE_SIZE = 10;
 
 class UserService {
+    /**
+     * Una cuenta que no está activa (desactivada por su dueño, D7) responde EXACTAMENTE igual
+     * que una inexistente: los demás no pueden saber que existe. (Su dueño no llega aquí: con
+     * la cuenta desactivada, `protect` corta todo /users/* con 403 ACCOUNT_DEACTIVATED.)
+     */
     async _findUserOrFail(username) {
         const user = await UserModel.findByUsername(username);
-        if (!user) throw new NotFoundError('Usuario no encontrado');
+        if (!user || user.status !== 'active') throw new NotFoundError('Usuario no encontrado');
         return user;
     }
 
@@ -45,6 +51,11 @@ class UserService {
             is_own_profile: isOwn,
             is_private_lock: !isOwn && !targetUser.is_profile_public,
             library: await this._libraryFor(targetUser, requestingUserId, 1, DEFAULT_PAGE_SIZE),
+            // Solo en el perfil propio: la app sabe si debe pedir aceptar los términos antes de
+            // publicar (sesiones abiertas antes de la 1.3 no vuelven a pasar por el login).
+            ...(isOwn && termsStatus(targetUser.terms_version)),
+            // Solo en el perfil propio (tarea 2.1): la app decide si entra en modo solo lectura.
+            ...(isOwn && { status: targetUser.status }),
         };
 
         return profile;

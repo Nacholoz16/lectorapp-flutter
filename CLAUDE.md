@@ -2,7 +2,7 @@
 
 Guía técnica para cualquier agente o desarrollador que trabaje en este repositorio: qué es la app,
 cómo está construida, qué contratos respeta y qué reglas seguir al modificarla. Describe el estado
-**real del código en la versión 1.0.0** (tag `v1.0.0`); lo planificado para después vive en
+**real del código en la versión 1.1.0** (tag `v1.1.0`); lo planificado para después vive en
 `BACKLOG.md` y `PENDIENTES.md` y no se describe aquí.
 
 Última revisión completa contra el código: 2026-11-11 (`flutter analyze` sin issues, 47 tests en verde,
@@ -35,7 +35,7 @@ Qué puede hacer el usuario hoy:
 |---|---|---|
 | App Flutter | este repo (`test_lectorapp`, rama `main`) | El paquete Dart se sigue llamando `test_lectorapp`. |
 | API | repo hermano `../Lectorapp API` (Node.js + Express 5 + MySQL) | **Único lugar donde se modifica el backend.** |
-| Espejo de la API | `backend/` en este repo | **Solo lectura.** Copia del repo de la API en el commit `9b73636` (= API 1.0.0). El repo de la API puede ir por delante. |
+| Espejo de la API | `backend/` en este repo | **Solo lectura.** Copia del repo de la API en el commit `4298c53` (= API 1.1.0). El repo de la API puede ir por delante. |
 | Producción | `https://api.nacholoz3d.cl/api` | Servidor Docker; ver §9. |
 | Web pública | `https://nacholoz3d.cl/libro/<external_id>` | Front web antiguo (`lectorFront`, Ionic); destino de los enlaces compartidos. No está en este repo. |
 
@@ -43,7 +43,7 @@ Qué puede hacer el usuario hoy:
 > Sirve para leer controladores, validadores y SQL sin salir del repo. Cualquier cambio real va en
 > `../Lectorapp API` y después se re-sincroniza el espejo (§9).
 
-### Historia resumida (hasta 1.0.0)
+### Historia resumida (hasta 1.1.0)
 
 1. Proyecto inicial full-stack (UI Flutter + API Node) y snapshot con íconos/splash.
 2. **Robustez:** `ApiClient` único, logout real, booleanos tolerantes, URL de la API por `--dart-define`, HTTP solo en debug.
@@ -52,12 +52,13 @@ Qué puede hacer el usuario hoy:
 5. **Plataforma:** ícono adaptativo con capa monocroma, splash claro/oscuro, 90/120 Hz fiable, cambio de ID a `com.nacholoz3d.lectorapp`, vista previa en Chrome.
 6. **Diseño y accesibilidad:** tokens de color de dos tonos (pastel + ink) con contraste verificado por tests, formulario único de lectura con borrador, feed/perfil accesibles, estados vacíos y de error, nueva navegación (Inicio · Biblioteca · Perfil).
 7. **Cuenta:** recuperación de contraseña por email y refresh tokens rotativos → **release 1.0.0** (2026-11-08, ver `CHANGELOG.md`).
+8. **Cuenta y privacidad:** términos y privacidad publicados en la web nueva, aceptación obligatoria, desactivar/reactivar, eliminar la cuenta (app y web) y tope por cuenta en los códigos por correo → **release 1.1.0** (2026-11-22).
 
 ---
 
 ## 2. Stack y dependencias (`pubspec.yaml`)
 
-- **Dart SDK** `^3.0.0`, Material 3 (`useMaterial3: true`). Versión de la app: `1.0.0+1`.
+- **Dart SDK** `^3.0.0`, Material 3 (`useMaterial3: true`). Versión de la app: `1.1.0+2`.
 - **Linter:** `flutter_lints ^4.0.0` + reglas extra en `analysis_options.yaml`
   (`use_build_context_synchronously`, `unawaited_futures`, `cancel_subscriptions`, `close_sinks`,
   `prefer_const_constructors`, `prefer_const_declarations`, `always_declare_return_types`,
@@ -94,7 +95,7 @@ declararla individualmente.
 ```text
 test_lectorapp/
 ├── CLAUDE.md · README.md · CHANGELOG.md
-├── BACKLOG.md                        # Trabajo planificado posterior a 1.0.0
+├── BACKLOG.md                        # Trabajo planificado posterior a 1.1.0
 ├── PENDIENTES.md                     # Tareas no bloqueantes (firma de release, iOS, deuda técnica)
 ├── analysis_options.yaml             # Lints del proyecto
 ├── docs/guia-autenticacion.md        # Receta reutilizable: refresh tokens + recuperación (API y Flutter)
@@ -324,10 +325,7 @@ No hay base de datos local. Los borradores y preferencias **no** se borran al ce
 
 ---
 
-## 6. Contrato de la API (v1.0.0)
-
-> Incluye los cambios de las tareas 1.3 (aceptación de términos) y 2.1 (desactivar/reactivar la
-> cuenta), posteriores a la 1.0.0.
+## 6. Contrato de la API (v1.1.0)
 
 Base: `Config.baseUrl` (`https://api.nacholoz3d.cl/api`). Todo requiere `Authorization: Bearer <JWT>`
 **salvo** `/auth/*`, `/books/feed`, `/account/deletion-request`, `/account/deletion-confirm` y `/health`. Body JSON máx. 100 kb.
@@ -593,6 +591,6 @@ Commits: estilo *conventional* en inglés (`feat(ui): …`, `fix(app): …`, `do
 | [`README.md`](README.md) | Puesta en marcha para desarrolladores. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Qué incluye cada versión publicada. |
 | [`PENDIENTES.md`](PENDIENTES.md) | Tareas no bloqueantes: firma de release, bundle ID de iOS, rotar clave SMTP, deuda de código y de diseño. Actualizarla al cerrar o descubrir tareas. |
-| [`BACKLOG.md`](BACKLOG.md) | Trabajo planificado posterior a 1.0.0. |
+| [`BACKLOG.md`](BACKLOG.md) | Trabajo planificado posterior a 1.1.0. |
 | [`docs/guia-autenticacion.md`](docs/guia-autenticacion.md) | Sistema de sesión explicado paso a paso (API + Flutter). |
 | `backend/DEPLOY.md` | Infraestructura y despliegue de la API. |
